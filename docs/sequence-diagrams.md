@@ -64,17 +64,17 @@ sequenceDiagram
     VC->>DB: Find VerificationCode by referenceId and email
     
     alt Code Not Found
-        VC-->>User: 404 Not Found
+        VC-->>User: 200 OK {success: false, reasonId: 1, reasonMessage: "..."}
     else Code Found
         alt Code Expired
-            VC-->>User: 410 Gone
+            VC-->>User: 200 OK {success: false, reasonId: 2, reasonMessage: "..."}
         else Code Already Used
-            VC-->>User: 409 Conflict
+            VC-->>User: 200 OK {success: false, reasonId: 3, reasonMessage: "..."}
         else Incorrect Code
-            VC-->>User: 401 Unauthorized
+            VC-->>User: 200 OK {success: false, reasonId: 4, reasonMessage: "..."}
         else Valid Code
             VC->>DB: Update verifiedAt & Persist
-            VC-->>User: 200 OK
+            VC-->>User: 200 OK {success: true}
         end
     end
     deactivate VC

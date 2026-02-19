@@ -3,6 +3,7 @@ package nl.rijksoverheid.moz;
 import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
+import nl.rijksoverheid.moz.entity.StatisticFailureReason;
 import nl.rijksoverheid.moz.entity.VerificationStatistics;
 import org.junit.jupiter.api.Test;
 
@@ -17,14 +18,16 @@ public class AdminStatisticsControllerTest {
     @Test
     void testGetAdminStatistics() {
         createStats();
-        
+
         given()
                 .contentType(ContentType.JSON)
                 .when().get("/admin/statistics")
                 .then()
                 .statusCode(200)
                 .body("averageVerificationTimeSeconds", is(90.0f))
-                .body("unverifiedPercentage", is(33.333332f));
+                .body("unverifiedPercentage", is(50.0f))
+                .body("notSentCount", is(1))
+                .body("notVerifiedCount", is(1));
     }
 
     @jakarta.transaction.Transactional
@@ -47,12 +50,20 @@ public class AdminStatisticsControllerTest {
 
         // Average should be (120 + 60) / 2 = 90 seconds
 
-        // Create an unverified statistic
+        // Create an unverified statistic (NOT_VERIFIED)
         VerificationStatistics stat3 = new VerificationStatistics();
         stat3.setCreatedAt(LocalDateTime.now().minusMinutes(20));
         stat3.setVerifyEmailSentAt(LocalDateTime.now().minusMinutes(19));
         stat3.setVerifiedAt(null);
+        stat3.setFailureReason(StatisticFailureReason.NOT_VERIFIED);
         stat3.persist();
+
+        // Create an unverified statistic (NOT_SENT)
+        VerificationStatistics stat4 = new VerificationStatistics();
+        stat4.setCreatedAt(LocalDateTime.now().minusMinutes(30));
+        stat4.setVerifiedAt(null);
+        stat4.setFailureReason(StatisticFailureReason.NOT_SENT);
+        stat4.persist();
     }
 
     @Test
@@ -65,7 +76,9 @@ public class AdminStatisticsControllerTest {
                 .then()
                 .statusCode(200)
                 .body("averageVerificationTimeSeconds", is(0.0f))
-                .body("unverifiedPercentage", is(0.0f));
+                .body("unverifiedPercentage", is(0.0f))
+                .body("notSentCount", is(0))
+                .body("notVerifiedCount", is(0));
     }
 
     @jakarta.transaction.Transactional

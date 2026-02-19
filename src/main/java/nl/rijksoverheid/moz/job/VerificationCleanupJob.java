@@ -3,6 +3,7 @@ package nl.rijksoverheid.moz.job;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
+import nl.rijksoverheid.moz.entity.StatisticFailureReason;
 import nl.rijksoverheid.moz.entity.VerificationCode;
 import nl.rijksoverheid.moz.entity.VerificationStatistics;
 import org.jboss.logging.Logger;
@@ -47,6 +48,11 @@ public class VerificationCleanupJob {
             VerificationStatistics statistics = new VerificationStatistics();
             statistics.setCreatedAt(code.getCreatedAt());
             statistics.setVerifyEmailSentAt(code.getVerifyEmailSentAt());
+            if (code.getVerifyEmailSentAt() == null) {
+                statistics.setFailureReason(StatisticFailureReason.NOT_SENT);
+            } else {
+                statistics.setFailureReason(StatisticFailureReason.NOT_VERIFIED);
+            }
             statistics.persist();
         }
 

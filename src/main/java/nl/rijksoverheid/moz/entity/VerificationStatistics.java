@@ -15,6 +15,7 @@ public class VerificationStatistics extends PanacheEntity {
     private LocalDateTime createdAt;
     private LocalDateTime verifyEmailSentAt;
     private LocalDateTime verifiedAt; //if this is null, it means the code was never verified
+    private StatisticFailureReason failureReason;
 
     public LocalDateTime getCreatedAt() {
         return createdAt;
@@ -38,5 +39,13 @@ public class VerificationStatistics extends PanacheEntity {
 
     public void setVerifyEmailSentAt(LocalDateTime verifyEmailSentAt) {
         this.verifyEmailSentAt = verifyEmailSentAt;
+    }
+
+    public StatisticFailureReason getFailureReason() {
+        return failureReason;
+    }
+
+    public void setFailureReason(StatisticFailureReason failureReason) {
+        this.failureReason = failureReason;
     }
 }

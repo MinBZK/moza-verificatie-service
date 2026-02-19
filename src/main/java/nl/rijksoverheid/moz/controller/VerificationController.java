@@ -4,10 +4,12 @@ import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
 import nl.rijksoverheid.moz.dto.request.VerificationApplicationRequest;
 import nl.rijksoverheid.moz.dto.request.VerificationRequest;
+import nl.rijksoverheid.moz.dto.response.VerificationFailureReason;
+import nl.rijksoverheid.moz.dto.response.VerificationResponse;
 import nl.rijksoverheid.moz.entity.VerificationCode;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.media.Content;
@@ -64,6 +66,7 @@ public class VerificationController {
 
     @POST
     @Path("/verify")
+    @Produces(MediaType.APPLICATION_JSON)
     @Transactional
     @Operation(
             summary = "Verify a verification code",
@@ -72,55 +75,36 @@ public class VerificationController {
     @APIResponses({
             @APIResponse(
                     responseCode = "200",
-                    description = "Verification successful"
-            ),
-            @APIResponse(
-                    responseCode = "400",
-                    description = "Incorrect code"
-            ),
-            @APIResponse(
-                    responseCode = "401",
-                    description = "Incorrect code"
-            ),
-            @APIResponse(
-                    responseCode = "404",
-                    description = "Reference ID or email not found"
-            ),
-            @APIResponse(
-                    responseCode = "409",
-                    description = "Code already used"
-            ),
-            @APIResponse(
-                    responseCode = "410",
-                    description = "Code expired"
+                    description = "Verification attempt completed",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = VerificationResponse.class))
             )
     })
-    public Response verify(@Valid VerificationRequest request) {
+    public VerificationResponse verify(@Valid VerificationRequest request) {
 
         Optional<VerificationCode> codeOpt = VerificationCode.findByReferenceIdAndEmail(request.getReferenceId(), request.getEmail());
         if (codeOpt.isEmpty()) {
             LOG.warn("Verification failed: code not found for referenceId: " + request.getReferenceId() + " and email: " + request.getEmail());
-            return Response.status(404).build();
+            return new VerificationResponse(false, VerificationFailureReason.CODE_NOT_FOUND);
         }
         VerificationCode code = codeOpt.get();
 
         if (code.getValidUntil().isBefore(LocalDateTime.now())) {
             LOG.warn("Verification failed: code expired for referenceId: " + request.getReferenceId());
-            return Response.status(410).build();
+            return new VerificationResponse(false, VerificationFailureReason.CODE_EXPIRED);
         }
 
         if (code.isUsed()) {
             LOG.warn("Verification failed: code already used for referenceId: " + request.getReferenceId());
-            return Response.status(409).build();
+            return new VerificationResponse(false, VerificationFailureReason.CODE_ALREADY_USED);
         }
 
         if (!Objects.equals(code.getCode(), request.getCode())) {
             LOG.warn("Verification failed: incorrect code for referenceId: " + request.getReferenceId());
-            return Response.status(401).build();
+            return new VerificationResponse(false, VerificationFailureReason.INCORRECT_CODE);
         }
 
         VerificationCode.update("verifiedAt = ?1 where id = ?2", LocalDateTime.now(), code.id);
         LOG.info("Verification successful for referenceId: " + request.getReferenceId());
-        return Response.status(200).build();
+        return new VerificationResponse(true);
     }
 }

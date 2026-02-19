@@ -7,6 +7,7 @@ import io.restassured.http.ContentType;
 import nl.rijksoverheid.moz.service.NotifyNLService;
 import nl.rijksoverheid.moz.dto.request.VerificationApplicationRequest;
 import nl.rijksoverheid.moz.dto.request.VerificationRequest;
+import nl.rijksoverheid.moz.entity.StatisticFailureReason;
 import nl.rijksoverheid.moz.entity.VerificationCode;
 import nl.rijksoverheid.moz.entity.VerificationStatistics;
 import jakarta.inject.Inject;
@@ -21,6 +22,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 
@@ -97,7 +99,8 @@ class VerificationControllerTest {
                 .body(request)
                 .when().post("/verify")
                 .then()
-                .statusCode(200);
+                .statusCode(200)
+                .body("success", is(true));
     }
 
     @Test
@@ -112,7 +115,10 @@ class VerificationControllerTest {
                 .body(request)
                 .when().post("/verify")
                 .then()
-                .statusCode(404);
+                .statusCode(200)
+                .body("success", is(false))
+                .body("reasonId", is(1))
+                .body("reasonMessage", is("Reference ID or email not found"));
     }
 
     @Test
@@ -142,7 +148,10 @@ class VerificationControllerTest {
                 .body(request)
                 .when().post("/verify")
                 .then()
-                .statusCode(410);
+                .statusCode(200)
+                .body("success", is(false))
+                .body("reasonId", is(2))
+                .body("reasonMessage", is("Code expired"));
     }
 
     @Transactional
@@ -177,15 +186,19 @@ class VerificationControllerTest {
                 .body(request)
                 .when().post("/verify")
                 .then()
-                .statusCode(200);
+                .statusCode(200)
+                .body("success", is(true));
 
-        // Second verification - should fail with 409
+        // Second verification - should fail with 200 and reasonId 3
         given()
                 .contentType(ContentType.JSON)
                 .body(request)
                 .when().post("/verify")
                 .then()
-                .statusCode(409);
+                .statusCode(200)
+                .body("success", is(false))
+                .body("reasonId", is(3))
+                .body("reasonMessage", is("Code already used"));
     }
 
     @Test
@@ -212,7 +225,10 @@ class VerificationControllerTest {
                 .body(request)
                 .when().post("/verify")
                 .then()
-                .statusCode(401);
+                .statusCode(200)
+                .body("success", is(false))
+                .body("reasonId", is(4))
+                .body("reasonMessage", is("Incorrect code"));
     }
     @Inject
     VerificationCleanupJob cleanupJob;
@@ -239,6 +255,7 @@ class VerificationControllerTest {
     void testCleanUpExpiredCodes() {
         VerificationCode code = new VerificationCode("cleanup-expired@example.com");
         code.setValidUntil(LocalDateTime.now().minusMinutes(1));
+        code.setVerifyEmailSentAt(LocalDateTime.now().minusMinutes(2));
         code.persist();
 
         cleanupJob.cleanUpExpiredCodes();
@@ -249,5 +266,46 @@ class VerificationControllerTest {
         // Check that statistics are created (verifiedAt should be null)
         List<VerificationStatistics> stats = VerificationStatistics.listAll();
         assertTrue(stats.stream().anyMatch(s -> s.getVerifiedAt() == null));
+        assertTrue(stats.stream().anyMatch(s -> s.getFailureReason() == StatisticFailureReason.NOT_VERIFIED));
+    }
+
+    @Test
+    @TestTransaction
+    void testCleanUpExpiredCodesNotSent() {
+        VerificationCode code = new VerificationCode("cleanup-not-sent@example.com");
+        code.setValidUntil(LocalDateTime.now().minusMinutes(1));
+        code.setVerifyEmailSentAt(null);
+        code.persist();
+
+        cleanupJob.cleanUpExpiredCodes();
+
+        // Check that code is deleted
+        assertNull(VerificationCode.findById(code.id));
+
+        // Check that statistics are created with NOT_SENT reason
+        List<VerificationStatistics> stats = VerificationStatistics.listAll();
+        assertTrue(stats.stream().anyMatch(s -> s.getFailureReason() == StatisticFailureReason.NOT_SENT));
+    }
+
+    @Test
+    @TestTransaction
+    void testAdminStatisticsIncludeFailureCounts() {
+        VerificationCode code1 = new VerificationCode("not-sent@example.com");
+        code1.setValidUntil(LocalDateTime.now().minusMinutes(1));
+        code1.setVerifyEmailSentAt(null);
+        code1.persist();
+
+        VerificationCode code2 = new VerificationCode("not-verified@example.com");
+        code2.setValidUntil(LocalDateTime.now().minusMinutes(1));
+        code2.setVerifyEmailSentAt(LocalDateTime.now().minusMinutes(2));
+        code2.persist();
+
+        cleanupJob.cleanUpExpiredCodes();
+
+        // Check DB directly since the transaction might not be visible to the HTTP server
+        List<VerificationStatistics> stats = VerificationStatistics.listAll();
+        assertEquals(2, stats.size());
+        assertTrue(stats.stream().anyMatch(s -> s.getFailureReason() == StatisticFailureReason.NOT_SENT));
+        assertTrue(stats.stream().anyMatch(s -> s.getFailureReason() == StatisticFailureReason.NOT_VERIFIED));
     }
 }
