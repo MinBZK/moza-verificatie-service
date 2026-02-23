@@ -1,3 +1,6 @@
+
+![Project Pre-Alpha Status](https://img.shields.io/badge/life_cycle-pre_alpha-red)
+
 # Verificatieservice
 
 De Verificatieservice is een op Quarkus gebaseerde microservice die verantwoordelijk is voor het genereren en verifiëren van verificatiecodes via e-mail (gesimuleerd via RabbitMQ).
