@@ -9,11 +9,19 @@ import nl.rijksoverheid.moz.entity.VerificationStatistics;
 import org.jboss.logging.Logger;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 @ApplicationScoped
 public class VerificationCleanupJob {
 
     private static final Logger LOG = Logger.getLogger(VerificationCleanupJob.class);
+
+    private final AtomicLong lastSuccessfulCleanupTimestamp = new AtomicLong(0);
+    private final AtomicLong lastExpiredCleanupTimestamp = new AtomicLong(0);
+    private final AtomicLong successfulCleanupCount = new AtomicLong(0);
+    private final AtomicLong expiredCleanupCount = new AtomicLong(0);
+    private final AtomicLong totalSuccessfulCodesProcessed = new AtomicLong(0);
+    private final AtomicLong totalExpiredCodesProcessed = new AtomicLong(0);
 
     @Scheduled(every = "{verification.cleanup.schedule}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     @Transactional
@@ -33,6 +41,11 @@ public class VerificationCleanupJob {
         }
 
         codes.forEach(VerificationCode::delete);
+        
+        // Update metrics
+        lastSuccessfulCleanupTimestamp.set(System.currentTimeMillis());
+        successfulCleanupCount.incrementAndGet();
+        totalSuccessfulCodesProcessed.addAndGet(codes.size());
     }
 
     @Scheduled(every = "{verification.cleanup.schedule}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
@@ -57,5 +70,35 @@ public class VerificationCleanupJob {
         }
 
         codes.forEach(VerificationCode::delete);
+        
+        // Update metrics
+        lastExpiredCleanupTimestamp.set(System.currentTimeMillis());
+        expiredCleanupCount.incrementAndGet();
+        totalExpiredCodesProcessed.addAndGet(codes.size());
+    }
+    
+    // Getter methods for health check monitoring
+    public long getLastSuccessfulCleanupTimestamp() {
+        return lastSuccessfulCleanupTimestamp.get();
+    }
+    
+    public long getLastExpiredCleanupTimestamp() {
+        return lastExpiredCleanupTimestamp.get();
+    }
+    
+    public long getSuccessfulCleanupCount() {
+        return successfulCleanupCount.get();
+    }
+    
+    public long getExpiredCleanupCount() {
+        return expiredCleanupCount.get();
+    }
+    
+    public long getTotalSuccessfulCodesProcessed() {
+        return totalSuccessfulCodesProcessed.get();
+    }
+    
+    public long getTotalExpiredCodesProcessed() {
+        return totalExpiredCodesProcessed.get();
     }
 }

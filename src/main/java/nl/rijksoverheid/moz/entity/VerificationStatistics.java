@@ -2,10 +2,12 @@ package nl.rijksoverheid.moz.entity;
 
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
 
 import java.time.LocalDateTime;
 
 @Entity
+@Table(name = "verification_statistics")
 public class VerificationStatistics extends PanacheEntity {
 
     // Maybe good to keep track of statistics to see how fast people verify,

@@ -2,6 +2,7 @@ package nl.rijksoverheid.moz.service;
 
 import io.smallrye.jwt.build.Jwt;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.entity.VerificationCode;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
@@ -16,7 +17,9 @@ import java.time.Instant;
 public class NotifyNLService {
 
     private static final Logger LOG = Logger.getLogger(NotifyNLService.class);
-    private final HttpClient httpClient;
+
+    @Inject
+    HttpClient httpClient;
 
     @ConfigProperty(name = "notifynl.emailverificatie.url")
     String url;
@@ -27,64 +30,107 @@ public class NotifyNLService {
     @ConfigProperty(name = "notifynl.emailverificatie.api-key")
     String apiKey;
 
-    public NotifyNLService() {
-        this.httpClient = HttpClient.newHttpClient();
-    }
+    private static final int HTTP_OK = 200;
+    private static final int HTTP_CREATED = 201;
+    private static final int API_KEY_MIN_LENGTH = 74;
+    private static final int SERVICE_ID_START_OFFSET = 73;
+    private static final int SERVICE_ID_LENGTH = 36;
+    private static final int SECRET_LENGTH = 36;
 
     /**
      * Calls NotifyNL service via HTTP POST.
      * Returns true if successful (200 OK or 201 Created), false otherwise.
      */
-    public boolean sendVerificationEmail(VerificationCode code) {
+    public boolean sendVerificationEmail(VerificationCode code, String email) {
 
-        LOG.info("Calling NotifyNL service for email: " + code.getEmail());
+        LOG.info("Calling NotifyNL service for email: " + email);
 
         try {
-            String jsonBody = String.format(
-                    "{\"personalisation\":{\"code\":\"%s\"},\"template_id\":\"%s\",\"email_address\":\"%s\"}"
-                    , code.getCode(), templateId, code.getEmail()
-            );
-
+            String jsonBody = buildJsonBody(code.getCode(), email);
             ApiKeyDetails keys = extractServiceIdAndApiKey(apiKey);
             String token = createToken(keys.secret(), keys.serviceId());
 
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .header("Content-Type", "application/json")
-                    .header("Authorization", "Bearer " + token)
-                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
-                    .build();
+            LOG.info(url);
+            LOG.info(templateId);
+            LOG.info(apiKey);
 
+            HttpRequest request = buildHttpRequest(jsonBody, token);
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-            if (response.statusCode() == 200 || response.statusCode() == 201) {
-                LOG.info("NotifyNL service call successful for email: " + code.getEmail());
+            if (isSuccessResponse(response)) {
+                LOG.info("Verification code sent for reference ID: " + code.getReferenceId());
                 return true;
             } else {
-                LOG.error("NotifyNL service returned status code: " + response.statusCode());
+                LOG.error("Failed to send verification code for reference ID: " + code.getReferenceId()
+                        + ", status code: " + response.statusCode() + ", response: " + response.body());
                 return false;
             }
         } catch (Exception e) {
-            LOG.error("Error calling NotifyNL service", e);
+            LOG.error("Failed to send verification code for reference ID: " + code.getReferenceId()
+                    + ", error: " + e.getMessage(), e);
             return false;
         }
+    }
+
+    /**
+     * Builds the JSON request body for NotifyNL API.
+     */
+    private String buildJsonBody(String code, String email) {
+        return String.format(
+                "{\"personalisation\":{\"code\":\"%s\"},\"template_id\":\"%s\",\"email_address\":\"%s\"}",
+                code, templateId, email
+        );
+    }
+
+    /**
+     * Builds the HTTP POST request with required headers.
+     */
+    private HttpRequest buildHttpRequest(String jsonBody, String token) {
+        return HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + token)
+                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .build();
+    }
+
+    /**
+     * Validates if the HTTP response indicates success.
+     */
+    private boolean isSuccessResponse(HttpResponse<String> response) {
+        return response.statusCode() == HTTP_OK || response.statusCode() == HTTP_CREATED;
     }
 
 
     private record ApiKeyDetails(String serviceId, String secret) {}
 
+    /**
+     * Extracts service ID and secret from the NotifyNL API key.
+     *
+     * @param fromApiKey The API key to extract from
+     * @return ApiKeyDetails containing service ID and secret
+     * @throws IllegalArgumentException if API key is invalid
+     */
     private static ApiKeyDetails extractServiceIdAndApiKey(String fromApiKey) {
-        if (fromApiKey == null || fromApiKey.isBlank() || fromApiKey.contains(" ") || fromApiKey.length() < 74) {
+        if (fromApiKey == null || fromApiKey.isBlank() || fromApiKey.contains(" ") || fromApiKey.length() < API_KEY_MIN_LENGTH) {
             throw new IllegalArgumentException(
                     "The API Key provided is invalid. Please ensure you are using a v2 API Key that is not empty or null");
         }
 
-        String serviceId = fromApiKey.substring(fromApiKey.length() - 73, fromApiKey.length() - 73 + 36);
-        String secret = fromApiKey.substring(fromApiKey.length() - 36);
+        int keyLength = fromApiKey.length();
+        String serviceId = fromApiKey.substring(keyLength - SERVICE_ID_START_OFFSET, keyLength - SERVICE_ID_START_OFFSET + SERVICE_ID_LENGTH);
+        String secret = fromApiKey.substring(keyLength - SECRET_LENGTH);
 
         return new ApiKeyDetails(serviceId, secret);
     }
 
+    /**
+     * Creates a JWT token for NotifyNL API authentication.
+     *
+     * @param secret    The API secret
+     * @param serviceId The service ID
+     * @return JWT token string
+     */
     private static String createToken(String secret, String serviceId) {
         return Jwt.issuer(serviceId)
                 .issuedAt(Instant.now())

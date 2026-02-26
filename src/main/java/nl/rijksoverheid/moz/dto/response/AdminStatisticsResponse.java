@@ -8,11 +8,6 @@ public class AdminStatisticsResponse {
 
     public AdminStatisticsResponse() {}
 
-    public AdminStatisticsResponse(double averageVerificationTimeSeconds, double unverifiedPercentage) {
-        this.averageVerificationTimeSeconds = averageVerificationTimeSeconds;
-        this.unverifiedPercentage = unverifiedPercentage;
-    }
-
     public AdminStatisticsResponse(double averageVerificationTimeSeconds, double unverifiedPercentage, long notSentCount, long notVerifiedCount) {
         this.averageVerificationTimeSeconds = averageVerificationTimeSeconds;
         this.unverifiedPercentage = unverifiedPercentage;

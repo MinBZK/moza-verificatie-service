@@ -13,10 +13,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Entity
+@Table(name = "verification_code")
 public class VerificationCode extends PanacheEntity {
 
     private String referenceId;
-    private String email;
     private String code;
 
     @Column(name = "created_at", updatable = false, nullable = false)
@@ -37,30 +37,28 @@ public class VerificationCode extends PanacheEntity {
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    public VerificationCode() {}
-
-    @PrePersist
-    protected void onCreate() {
-        if (createdAt == null) {
-            createdAt = LocalDateTime.now();
-        }
-        if (validUntil == null) {
-            int validityMinutes = ConfigProvider.getConfig()
-                    .getOptionalValue("verification.code.validity-minutes", Integer.class)
-                    .orElse(10);
-            validUntil = createdAt.plusMinutes(validityMinutes);
-        }
-        if (referenceId == null) {
-            referenceId = UUID.randomUUID().toString();
-        }
-
-        if (code == null) {
-            code = String.valueOf(100000 + RANDOM.nextInt(900000));
-        }
+    public VerificationCode() {
+        this.createdAt = LocalDateTime.now();
+        int validityMinutes = ConfigProvider.getConfig()
+                .getOptionalValue("verification.code.validity-minutes", Integer.class)
+                .orElse(10);
+        this.validUntil = createdAt.plusMinutes(validityMinutes);
+        this.referenceId = UUID.randomUUID().toString();
+        
+        int codeLength = ConfigProvider.getConfig()
+                .getOptionalValue("verification.code.length", Integer.class)
+                .orElse(6);
+        this.code = generateCode(codeLength);
     }
-
-    public VerificationCode(String email) {
-        this.email = email;
+    
+    private String generateCode(int length) {
+        if (length <= 0) {
+            throw new IllegalArgumentException("Code length must be positive");
+        }
+        int min = (int) Math.pow(10, length - 1);
+        int max = (int) Math.pow(10, length) - 1;
+        int range = max - min + 1;
+        return String.valueOf(min + RANDOM.nextInt(range));
     }
 
     public long getId() {
@@ -77,14 +75,6 @@ public class VerificationCode extends PanacheEntity {
 
     public void setReferenceId(String referenceId) {
         this.referenceId = referenceId;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public void setEmail(String email) {
-        this.email = email;
     }
 
     public String getCode() {
@@ -140,8 +130,8 @@ public class VerificationCode extends PanacheEntity {
     }
 
 
-    public static Optional<VerificationCode> findByReferenceIdAndEmail(String referenceId, String email) {
-        return find("referenceId = ?1 and email = ?2", referenceId, email).singleResultOptional();
+    public static Optional<VerificationCode> findByReferenceId(String referenceId) {
+        return find("referenceId = ?1", referenceId).singleResultOptional();
     }
 
     public static List<VerificationCode> findSuccessfulVerifications() {

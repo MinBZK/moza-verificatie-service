@@ -40,7 +40,7 @@ class VerificationControllerTest {
 
     @BeforeEach
     void setup() {
-        Mockito.when(notifyNLService.sendVerificationEmail(any())).thenReturn(true);
+        Mockito.when(notifyNLService.sendVerificationEmail(any(), any())).thenReturn(true);
         clearStats();
     }
 
@@ -67,7 +67,7 @@ class VerificationControllerTest {
         assertNotNull(referenceId);
         assertFalse(referenceId.isEmpty());
 
-        VerificationCode code = VerificationCode.find("email", "test@example.com").firstResult();
+        VerificationCode code = VerificationCode.find("referenceId", referenceId).firstResult();
         assertNotNull(code);
         assertEquals(referenceId, code.getReferenceId());
     }
@@ -90,7 +90,6 @@ class VerificationControllerTest {
         assertNotNull(code);
 
         VerificationRequest request = new VerificationRequest();
-        request.setEmail("success@example.com");
         request.setReferenceId(referenceId);
         request.setCode(code.getCode());
 
@@ -106,7 +105,6 @@ class VerificationControllerTest {
     @Test
     void testVerifyNotFound() {
         VerificationRequest request = new VerificationRequest();
-        request.setEmail("nonexistent@example.com");
         request.setReferenceId("invalid-ref-id");
         request.setCode("123456");
 
@@ -118,7 +116,7 @@ class VerificationControllerTest {
                 .statusCode(200)
                 .body("success", is(false))
                 .body("reasonId", is(1))
-                .body("reasonMessage", is("Reference ID or email not found"));
+                .body("reasonMessage", is("Reference ID not found"));
     }
 
     @Test
@@ -136,10 +134,8 @@ class VerificationControllerTest {
                 .extract().asString();
 
         expireCode(referenceId);
-
         VerificationCode code = VerificationCode.find("referenceId", referenceId).firstResult();
         VerificationRequest request = new VerificationRequest();
-        request.setEmail("expired@example.com");
         request.setReferenceId(referenceId);
         request.setCode(code.getCode());
 
@@ -177,7 +173,6 @@ class VerificationControllerTest {
 
         // First verification - should succeed
         VerificationRequest request = new VerificationRequest();
-        request.setEmail("used@example.com");
         request.setReferenceId(referenceId);
         request.setCode(code.getCode());
 
@@ -216,7 +211,6 @@ class VerificationControllerTest {
                 .extract().asString();
 
         VerificationRequest request = new VerificationRequest();
-        request.setEmail("wrongcode@example.com");
         request.setReferenceId(referenceId);
         request.setCode("000000"); // Wrong code
 
@@ -230,13 +224,28 @@ class VerificationControllerTest {
                 .body("reasonId", is(4))
                 .body("reasonMessage", is("Incorrect code"));
     }
+    @Test
+    void testRequestVerificationFailure() {
+        Mockito.when(notifyNLService.sendVerificationEmail(any(), any())).thenReturn(false);
+
+        VerificationApplicationRequest request = new VerificationApplicationRequest();
+        request.setEmail("fail@example.com");
+
+        given()
+                .contentType(ContentType.JSON)
+                .body(request)
+                .when().post("/request")
+                .then()
+                .statusCode(500);
+    }
+
     @Inject
     VerificationCleanupJob cleanupJob;
 
     @Test
     @TestTransaction
     void testCleanUpSuccessfulVerifications() {
-        VerificationCode code = new VerificationCode("cleanup-success@example.com");
+        VerificationCode code = new VerificationCode();
         code.setVerifiedAt(LocalDateTime.now().minusMinutes(1));
         code.persist();
 
@@ -253,7 +262,7 @@ class VerificationControllerTest {
     @Test
     @TestTransaction
     void testCleanUpExpiredCodes() {
-        VerificationCode code = new VerificationCode("cleanup-expired@example.com");
+        VerificationCode code = new VerificationCode();
         code.setValidUntil(LocalDateTime.now().minusMinutes(1));
         code.setVerifyEmailSentAt(LocalDateTime.now().minusMinutes(2));
         code.persist();
@@ -272,7 +281,7 @@ class VerificationControllerTest {
     @Test
     @TestTransaction
     void testCleanUpExpiredCodesNotSent() {
-        VerificationCode code = new VerificationCode("cleanup-not-sent@example.com");
+        VerificationCode code = new VerificationCode();
         code.setValidUntil(LocalDateTime.now().minusMinutes(1));
         code.setVerifyEmailSentAt(null);
         code.persist();
@@ -290,12 +299,12 @@ class VerificationControllerTest {
     @Test
     @TestTransaction
     void testAdminStatisticsIncludeFailureCounts() {
-        VerificationCode code1 = new VerificationCode("not-sent@example.com");
+        VerificationCode code1 = new VerificationCode();
         code1.setValidUntil(LocalDateTime.now().minusMinutes(1));
         code1.setVerifyEmailSentAt(null);
         code1.persist();
 
-        VerificationCode code2 = new VerificationCode("not-verified@example.com");
+        VerificationCode code2 = new VerificationCode();
         code2.setValidUntil(LocalDateTime.now().minusMinutes(1));
         code2.setVerifyEmailSentAt(LocalDateTime.now().minusMinutes(2));
         code2.persist();
