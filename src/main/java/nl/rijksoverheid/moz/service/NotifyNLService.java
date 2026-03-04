@@ -68,10 +68,6 @@ public class NotifyNLService {
             ApiKeyDetails keys = extractServiceIdAndApiKey(effectiveApiKey);
             String token = createToken(keys.secret(), keys.serviceId());
 
-            LOG.info(url);
-            LOG.info("Using template ID: " + effectiveTemplateId);
-            LOG.info("Using API key: " + (customApiKey != null && !customApiKey.isBlank() ? "custom" : "default"));
-
             HttpRequest request = buildHttpRequest(jsonBody, token);
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
