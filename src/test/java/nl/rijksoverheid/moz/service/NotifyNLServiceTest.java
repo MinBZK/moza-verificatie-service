@@ -92,16 +92,10 @@ public class NotifyNLServiceTest {
 
     @Test
     void testBuildJsonBody() throws Exception {
-        Method method = NotifyNLService.class.getDeclaredMethod("buildJsonBody", String.class, String.class);
+        Method method = NotifyNLService.class.getDeclaredMethod("buildJsonBody", String.class, String.class, String.class);
         method.setAccessible(true);
 
-        // We need to set templateId first if we use the injected one, 
-        // or just use reflection to set it on a new instance.
-        Field templateIdField = NotifyNLService.class.getDeclaredField("templateId");
-        templateIdField.setAccessible(true);
-        templateIdField.set(injectedNotifyNLService, "my-template-id");
-
-        String json = (String) method.invoke(injectedNotifyNLService, "123456", "test@example.com");
+        String json = (String) method.invoke(injectedNotifyNLService, "123456", "test@example.com", "my-template-id");
         Assertions.assertTrue(json.contains("\"code\":\"123456\""));
         Assertions.assertTrue(json.contains("\"email_address\":\"test@example.com\""));
         Assertions.assertTrue(json.contains("\"template_id\":\"my-template-id\""));

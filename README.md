@@ -3,23 +3,26 @@
 
 # Verificatieservice
 
-De Verificatieservice is een op Quarkus gebaseerde microservice die verantwoordelijk is voor het genereren en verifiëren van verificatiecodes via e-mail (gesimuleerd via RabbitMQ).
+De Verificatieservice is een op Quarkus gebaseerde microservice die verantwoordelijk is voor het genereren en verifiëren van verificatiecodes via e-mail.
 
 ## Functionaliteiten
 
-- **Verificatieaanvraag**: Gebruikers kunnen een verificatiecode aanvragen voor een specifiek e-mailadres.
-- **Verificatie**: Validatie van de verstrekte code tegen een referentie-ID en e-mailadres.
+- **Verificatieaanvraag**: Gebruikers kunnen een verificatiecode aanvragen voor een specifiek e-mailadres. Optioneel kunnen eigen NotifyNL API-sleutel en template-ID worden meegegeven.
+- **Verificatie**: Validatie van de verstrekte code tegen een referentie-ID.
+- **E-mailnotificaties**: Verificatiecodes worden verzonden via NotifyNL.
 - **Automatische opschoning**: Verlopen en succesvol geverifieerde codes worden periodiek verplaatst naar statistieken en verwijderd uit de actieve tabel.
 - **Beheerdersstatistieken**: Inzicht in de gemiddelde verificatietijd en het percentage niet-geverifieerde aanvragen.
+- **Cleanup Job Monitoring**: Health check endpoint voor monitoring van de opschoonjobs.
 
 ## Architectuur & Dependencies
 
 - **Framework**: [Quarkus](https://quarkus.io/) (Supersonic Subatomic Java Framework)
 - **Database**: PostgreSQL (met Hibernate ORM & Panache)
-- **Messaging**: RabbitMQ (via SmallRye Reactive Messaging)
+- **E-mail Service**: NotifyNL (voor het verzenden van verificatiecodes)
 - **Validatie**: Hibernate Validator (Jakarta Bean Validation)
 - **API Documentatie**: OpenAPI/Swagger UI
 - **Job Scheduling**: Quarkus Scheduler voor periodieke opschoning
+- **HTTP Client**: Java 11+ HttpClient (managed via CDI)
 
 ## Lokale Setup
 
@@ -31,14 +34,13 @@ De Verificatieservice is een op Quarkus gebaseerde microservice die verantwoorde
 
 ### 1. Infrastructuur opstarten
 
-Start de benodigde services (PostgreSQL en RabbitMQ) met Docker Compose:
+Start de benodigde services (PostgreSQL) met Docker Compose:
 
 ```shell script
 docker-compose up -d
 ```
 
 - **PostgreSQL**: Draait op poort `5432`.
-- **RabbitMQ**: Draait op poort `5672` (Management UI op `http://localhost:15672`, log in met `user`/`password`).
 
 ### 2. Applicatie starten in Dev Mode
 
@@ -56,22 +58,41 @@ De applicatie is beschikbaar op `http://localhost:8080`.
 
 ### Verificatie
 
-- `POST /request`: Vraag een nieuwe code aan. Verwacht een JSON met `email`. Retourneert een `referenceId`.
-- `POST /verify`: Verifieer een code. Verwacht een JSON met `referenceId`, `email` en `code`.
+- `POST /request`: Vraag een nieuwe code aan. Verwacht een JSON met `email` (verplicht), en optioneel `apiKey` en `templateId` voor custom NotifyNL configuratie. Retourneert een `referenceId`.
+- `POST /verify`: Verifieer een code. Verwacht een JSON met `referenceId` en `code`.
 
 ### Beheer
 
 - `GET /admin/statistics`: Haal statistieken op over de verificatieprocessen.
+- `GET /admin/cleanup-job/metrics`: Haal metrics en health informatie op over de cleanup jobs.
 
-## Messaging Flow
+## Verificatie Flow
 
-1. Bij een aanvraag (`POST /request`) wordt een `VerificationCode` opgeslagen.
-2. Een bericht met het database-ID wordt verstuurd naar het RabbitMQ exchange `verification-requests`.
-3. De `VerificationRequestHandler` ontvangt dit bericht, zoekt de code op en simuleert het versturen van een e-mail door een logregel te schrijven en de verzendtijd bij te werken.
+1. Bij een aanvraag (`POST /request`) wordt een `VerificationCode` gegenereerd en opgeslagen in de database.
+2. De verificatiecode wordt direct verzonden via NotifyNL naar het opgegeven e-mailadres.
+3. De gebruiker ontvangt de code en kan deze verifiëren via `POST /verify`.
+4. Bij succesvolle verificatie wordt de code gemarkeerd als gebruikt.
+5. Periodiek worden verlopen en gebruikte codes opgeschoond en verplaatst naar statistieken.
 
 ## Configuratie
 
 Belangrijke parameters in `src/main/resources/application.properties`:
 
-- `verification.code.validity-minutes`: Hoe lang een code geldig blijft (standaard 10 min).
+### Verificatiecode instellingen
+- `verification.code.validity-minutes`: Hoe lang een code geldig blijft (standaard 10 minuten).
+- `verification.code.length`: Lengte van de gegenereerde verificatiecode (standaard 6 cijfers).
 - `verification.cleanup.schedule`: Frequentie van de opschoonjobs (standaard elke 60 seconden).
+
+### NotifyNL configuratie
+- `notifynl.emailverificatie.url`: NotifyNL API endpoint URL.
+- `notifynl.emailverificatie.api-key`: Standaard NotifyNL API-sleutel (gebruikt als fallback).
+- `notifynl.emailverificatie.template-id`: Standaard NotifyNL template-ID (gebruikt als fallback).
+
+### HttpClient instellingen
+- `httpclient.connect-timeout-seconds`: Timeout voor het opzetten van een verbinding (standaard 10 seconden).
+- `httpclient.request-timeout-seconds`: Timeout voor het voltooien van een request (standaard 30 seconden).
+
+### Database configuratie
+- `quarkus.datasource.jdbc.url`: PostgreSQL database URL.
+- `quarkus.datasource.username`: Database gebruikersnaam.
+- `quarkus.datasource.password`: Database wachtwoord.

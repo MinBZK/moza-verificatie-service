@@ -60,7 +60,12 @@ public class VerificationController {
         LOG.info("Creating verification request");
         VerificationCode code = new VerificationCode();
         code.persist();
-        boolean result = notifyNLService.sendVerificationEmail(code, request.getEmail());
+        boolean result = notifyNLService.sendVerificationEmail(
+                code, 
+                request.getEmail(), 
+                request.getApiKey(), 
+                request.getTemplateId()
+        );
 
         if(result) {
             code.setVerifyEmailSentAt(LocalDateTime.now());

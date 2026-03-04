@@ -40,7 +40,7 @@ class VerificationControllerTest {
 
     @BeforeEach
     void setup() {
-        Mockito.when(notifyNLService.sendVerificationEmail(any(), any())).thenReturn(true);
+        Mockito.when(notifyNLService.sendVerificationEmail(any(), any(), any(), any())).thenReturn(true);
         clearStats();
     }
 
@@ -226,7 +226,7 @@ class VerificationControllerTest {
     }
     @Test
     void testRequestVerificationFailure() {
-        Mockito.when(notifyNLService.sendVerificationEmail(any(), any())).thenReturn(false);
+        Mockito.when(notifyNLService.sendVerificationEmail(any(), any(), any(), any())).thenReturn(false);
 
         VerificationApplicationRequest request = new VerificationApplicationRequest();
         request.setEmail("fail@example.com");

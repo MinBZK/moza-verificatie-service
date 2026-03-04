@@ -42,17 +42,35 @@ public class NotifyNLService {
      * Returns true if successful (200 OK or 201 Created), false otherwise.
      */
     public boolean sendVerificationEmail(VerificationCode code, String email) {
+        return sendVerificationEmail(code, email, null, null);
+    }
+
+    /**
+     * Calls NotifyNL service via HTTP POST with optional custom API key and template ID.
+     * Returns true if successful (200 OK or 201 Created), false otherwise.
+     * 
+     * @param code The verification code entity
+     * @param email The recipient email address
+     * @param customApiKey Optional custom API key (uses configured default if null or blank)
+     * @param customTemplateId Optional custom template ID (uses configured default if null or blank)
+     * @return true if email sent successfully, false otherwise
+     */
+    public boolean sendVerificationEmail(VerificationCode code, String email, String customApiKey, String customTemplateId) {
 
         LOG.info("Calling NotifyNL service for email: " + email);
 
         try {
-            String jsonBody = buildJsonBody(code.getCode(), email);
-            ApiKeyDetails keys = extractServiceIdAndApiKey(apiKey);
+            // Use custom values if provided, otherwise fall back to configured defaults
+            String effectiveApiKey = (customApiKey != null && !customApiKey.isBlank()) ? customApiKey : apiKey;
+            String effectiveTemplateId = (customTemplateId != null && !customTemplateId.isBlank()) ? customTemplateId : templateId;
+
+            String jsonBody = buildJsonBody(code.getCode(), email, effectiveTemplateId);
+            ApiKeyDetails keys = extractServiceIdAndApiKey(effectiveApiKey);
             String token = createToken(keys.secret(), keys.serviceId());
 
             LOG.info(url);
-            LOG.info(templateId);
-            LOG.info(apiKey);
+            LOG.info("Using template ID: " + effectiveTemplateId);
+            LOG.info("Using API key: " + (customApiKey != null && !customApiKey.isBlank() ? "custom" : "default"));
 
             HttpRequest request = buildHttpRequest(jsonBody, token);
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
@@ -75,10 +93,10 @@ public class NotifyNLService {
     /**
      * Builds the JSON request body for NotifyNL API.
      */
-    private String buildJsonBody(String code, String email) {
+    private String buildJsonBody(String code, String email, String effectiveTemplateId) {
         return String.format(
                 "{\"personalisation\":{\"code\":\"%s\"},\"template_id\":\"%s\",\"email_address\":\"%s\"}",
-                code, templateId, email
+                code, effectiveTemplateId, email
         );
     }
 
