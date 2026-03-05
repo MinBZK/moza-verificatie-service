@@ -22,7 +22,7 @@ public class AdminStatisticsController {
 
     @GET
     @Produces(MediaType.APPLICATION_JSON)
-    @Operation(summary = "Get admin statistics", description = "Returns statistics about the verification process.")
+    @Operation(summary = "Get admin statistics", description = "Returns statistics about the verification process.", hidden = true)
     @APIResponses({
             @APIResponse(
                     responseCode = "200",

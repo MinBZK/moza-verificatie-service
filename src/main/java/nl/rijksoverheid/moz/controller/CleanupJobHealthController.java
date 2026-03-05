@@ -25,7 +25,8 @@ public class CleanupJobHealthController {
     @Produces(MediaType.APPLICATION_JSON)
     @Operation(
             summary = "Get cleanup job metrics",
-            description = "Returns metrics and health information about the verification cleanup job"
+            description = "Returns metrics and health information about the verification cleanup job",
+            hidden = true
     )
     @APIResponses({
             @APIResponse(

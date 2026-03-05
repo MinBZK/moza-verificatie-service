@@ -14,6 +14,7 @@ import nl.rijksoverheid.moz.dto.response.VerificationResponse;
 import nl.rijksoverheid.moz.entity.VerificationCode;
 import nl.rijksoverheid.moz.service.NotifyNLService;
 import org.eclipse.microprofile.openapi.annotations.Operation;
+import org.eclipse.microprofile.openapi.annotations.enums.SchemaType;
 import org.eclipse.microprofile.openapi.annotations.media.Content;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
@@ -44,8 +45,11 @@ public class VerificationController {
     @APIResponses({
             @APIResponse(
                     responseCode = "200",
-                    description = "Verification request created",
-                    content = @Content(mediaType = MediaType.TEXT_PLAIN)
+                    description = "Verification request created, returns the reference ID",
+                    content = @Content(
+                            mediaType = MediaType.TEXT_PLAIN,
+                            schema = @Schema(type = SchemaType.STRING, example = "00000000-0000-0000-0000-000000000000")
+                    )
             ),
             @APIResponse(
                     responseCode = "400",
@@ -71,7 +75,7 @@ public class VerificationController {
             code.setVerifyEmailSentAt(LocalDateTime.now());
             return Response.ok(code.getReferenceId()).build();
         }
-        return Response.serverError().build();
+        return Response.serverError().entity("").build();
     }
 
     @POST

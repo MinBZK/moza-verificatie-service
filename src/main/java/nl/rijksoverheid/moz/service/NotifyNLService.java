@@ -56,9 +56,6 @@ public class NotifyNLService {
      * @return true if email sent successfully, false otherwise
      */
     public boolean sendVerificationEmail(VerificationCode code, String email, String customApiKey, String customTemplateId) {
-
-        LOG.info("Calling NotifyNL service for email: " + email);
-
         try {
             // Use custom values if provided, otherwise fall back to configured defaults
             String effectiveApiKey = (customApiKey != null && !customApiKey.isBlank()) ? customApiKey : apiKey;
