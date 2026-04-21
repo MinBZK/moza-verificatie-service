@@ -53,11 +53,13 @@ public class VerificationController {
             ),
             @APIResponse(
                     responseCode = "400",
-                    description = "Invalid request format"
+                    description = "Invalid request format",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = Object.class))
             ),
             @APIResponse(
                     responseCode = "500",
-                    description = "Internal server error"
+                    description = "Internal server error",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = Object.class))
             )
     })
     public Response requestVerification(@Valid VerificationApplicationRequest request) {
@@ -94,7 +96,8 @@ public class VerificationController {
             ),
             @APIResponse(
                     responseCode = "400",
-                    description = "Invalid request format"
+                    description = "Invalid request format",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = Object.class))
             )
     })
     public VerificationResponse verify(@Valid VerificationRequest request) {
