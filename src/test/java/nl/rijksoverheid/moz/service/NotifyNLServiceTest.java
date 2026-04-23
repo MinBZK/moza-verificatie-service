@@ -1,13 +1,17 @@
 package nl.rijksoverheid.moz.service;
 
+import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import nl.rijksoverheid.moz.entity.VerificationCode;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
-import org.eclipse.microprofile.config.ConfigProvider;
+import org.mockito.Mockito;
 import java.lang.reflect.Method;
-import java.lang.reflect.Field;
+import java.net.http.HttpClient;
+import java.net.http.HttpResponse;
+
+import static org.mockito.ArgumentMatchers.any;
 
 @QuarkusTest
 public class NotifyNLServiceTest {
@@ -24,6 +28,9 @@ public class NotifyNLServiceTest {
 
     @jakarta.inject.Inject
     NotifyNLService injectedNotifyNLService;
+
+    @InjectMock
+    HttpClient mockHttpClient;
 
     @Test
     void testExtractServiceIdAndApiKey() throws Exception {
@@ -143,21 +150,65 @@ public class NotifyNLServiceTest {
         });
     }
 
+    private static final String VALID_SERVICE_ID = "f7cceea0-ecea-4102-9b93-23a0a3cc0a07";
+    private static final String VALID_SECRET     = "69f428c9-2567-4e98-932a-8abe83fb89d7";
+    private static final String VALID_API_KEY    = "prefix-" + VALID_SERVICE_ID + "-" + VALID_SECRET;
+
+    @Test
+    void testSendVerificationEmailSuccess() throws Exception {
+        HttpResponse<String> mockResponse = Mockito.mock();
+        Mockito.when(mockResponse.statusCode()).thenReturn(200);
+        Mockito.doReturn(mockResponse).when(mockHttpClient).send(any(), any());
+
+        VerificationCode code = new VerificationCode();
+        Assertions.assertTrue(injectedNotifyNLService.sendVerificationEmail(code, "test@example.com"));
+    }
+
+    @Test
+    void testSendVerificationEmailFailure() throws Exception {
+        HttpResponse<String> mockResponse = Mockito.mock();
+        Mockito.when(mockResponse.statusCode()).thenReturn(400);
+        Mockito.when(mockResponse.body()).thenReturn("Bad request");
+        Mockito.doReturn(mockResponse).when(mockHttpClient).send(any(), any());
+
+        VerificationCode code = new VerificationCode();
+        Assertions.assertFalse(injectedNotifyNLService.sendVerificationEmail(code, "test@example.com"));
+    }
+
+    @Test
+    void testSendVerificationEmailException() throws Exception {
+        Mockito.doThrow(new RuntimeException("Connection refused")).when(mockHttpClient).send(any(), any());
+
+        VerificationCode code = new VerificationCode();
+        Assertions.assertFalse(injectedNotifyNLService.sendVerificationEmail(code, "test@example.com"));
+    }
+
+    @Test
+    void testSendVerificationEmailWithCustomApiKeyAndTemplateId() throws Exception {
+        HttpResponse<String> mockResponse = Mockito.mock();
+        Mockito.when(mockResponse.statusCode()).thenReturn(201);
+        Mockito.doReturn(mockResponse).when(mockHttpClient).send(any(), any());
+
+        VerificationCode code = new VerificationCode();
+        Assertions.assertTrue(injectedNotifyNLService.sendVerificationEmail(
+                code, "test@example.com", VALID_API_KEY, "custom-template-id"));
+    }
+
     @Test
     void testIsSuccessResponse() throws Exception {
         Method method = NotifyNLService.class.getDeclaredMethod("isSuccessResponse", java.net.http.HttpResponse.class);
         method.setAccessible(true);
 
-        java.net.http.HttpResponse<String> response200 = org.mockito.Mockito.mock(java.net.http.HttpResponse.class);
-        org.mockito.Mockito.when(response200.statusCode()).thenReturn(200);
+        HttpResponse<String> response200 = Mockito.mock();
+        Mockito.when(response200.statusCode()).thenReturn(200);
         Assertions.assertTrue((Boolean) method.invoke(notifyNLService, response200));
 
-        java.net.http.HttpResponse<String> response201 = org.mockito.Mockito.mock(java.net.http.HttpResponse.class);
-        org.mockito.Mockito.when(response201.statusCode()).thenReturn(201);
+        HttpResponse<String> response201 = Mockito.mock();
+        Mockito.when(response201.statusCode()).thenReturn(201);
         Assertions.assertTrue((Boolean) method.invoke(notifyNLService, response201));
 
-        java.net.http.HttpResponse<String> response400 = org.mockito.Mockito.mock(java.net.http.HttpResponse.class);
-        org.mockito.Mockito.when(response400.statusCode()).thenReturn(400);
+        HttpResponse<String> response400 = Mockito.mock();
+        Mockito.when(response400.statusCode()).thenReturn(400);
         Assertions.assertFalse((Boolean) method.invoke(notifyNLService, response400));
     }
 }
