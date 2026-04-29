@@ -1,13 +1,27 @@
 package nl.rijksoverheid.moz.service;
 
+import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
+import io.smallrye.faulttolerance.api.CircuitBreakerMaintenance;
+import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.entity.VerificationCode;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
-import org.eclipse.microprofile.config.ConfigProvider;
-import java.lang.reflect.Method;
+import org.mockito.Mockito;
+
+import java.io.IOException;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.net.http.HttpClient;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import static org.mockito.ArgumentMatchers.any;
 
 @QuarkusTest
 public class NotifyNLServiceTest {
@@ -17,13 +31,17 @@ public class NotifyNLServiceTest {
     @BeforeEach
     void setup() throws Exception {
         notifyNLService = new NotifyNLService();
-        // Set necessary fields via reflection or assume they are picked up from application.properties if using @QuarkusTest
-        // Actually NotifyNLService uses @ConfigProperty, which Quarkus injects.
-        // But since we are creating it with 'new', we might need to set them manually or use @Inject.
+        circuitBreakerMaintenance.resetAll();
     }
 
-    @jakarta.inject.Inject
+    @Inject
     NotifyNLService injectedNotifyNLService;
+
+    @Inject
+    CircuitBreakerMaintenance circuitBreakerMaintenance;
+
+    @InjectMock
+    HttpClient mockHttpClient;
 
     @Test
     void testExtractServiceIdAndApiKey() throws Exception {
@@ -143,21 +161,106 @@ public class NotifyNLServiceTest {
         });
     }
 
+    private static final String VALID_SERVICE_ID = "f7cceea0-ecea-4102-9b93-23a0a3cc0a07";
+    private static final String VALID_SECRET     = "69f428c9-2567-4e98-932a-8abe83fb89d7";
+    private static final String VALID_API_KEY    = "prefix-" + VALID_SERVICE_ID + "-" + VALID_SECRET;
+
+    @Test
+    void testSendVerificationEmailSuccess() throws Exception {
+        HttpResponse<String> mockResponse = Mockito.mock();
+        Mockito.when(mockResponse.statusCode()).thenReturn(200);
+        Mockito.doReturn(mockResponse).when(mockHttpClient).send(any(), any());
+
+        VerificationCode code = new VerificationCode();
+        Assertions.assertTrue(injectedNotifyNLService.sendVerificationEmail(code, "test@example.com"));
+    }
+
+    @Test
+    void testSendVerificationEmailFailure() throws Exception {
+        HttpResponse<String> mockResponse = Mockito.mock();
+        Mockito.when(mockResponse.statusCode()).thenReturn(400);
+        Mockito.when(mockResponse.body()).thenReturn("Bad request");
+        Mockito.doReturn(mockResponse).when(mockHttpClient).send(any(), any());
+
+        VerificationCode code = new VerificationCode();
+        Assertions.assertFalse(injectedNotifyNLService.sendVerificationEmail(code, "test@example.com"));
+    }
+
+    @Test
+    void testSendVerificationEmailException() throws Exception {
+        Mockito.doThrow(new IOException("Connection refused")).when(mockHttpClient).send(any(), any());
+
+        VerificationCode code = new VerificationCode();
+        Assertions.assertFalse(injectedNotifyNLService.sendVerificationEmail(code, "test@example.com"));
+    }
+
+    @Test
+    void testSendVerificationEmailWithCustomApiKeyAndTemplateId() throws Exception {
+        HttpResponse<String> mockResponse = Mockito.mock();
+        Mockito.when(mockResponse.statusCode()).thenReturn(201);
+        Mockito.doReturn(mockResponse).when(mockHttpClient).send(any(), any());
+
+        VerificationCode code = new VerificationCode();
+        Assertions.assertTrue(injectedNotifyNLService.sendVerificationEmail(
+                code, "test@example.com", VALID_API_KEY, "custom-template-id"));
+    }
+
+    private static final int RATE_LIMIT_MAX = 5;
+
+    @Test
+    void testSendVerificationEmailRateLimited() throws Exception {
+        HttpResponse<String> mockResponse = Mockito.mock();
+        Mockito.when(mockResponse.statusCode()).thenReturn(200);
+        Mockito.doReturn(mockResponse).when(mockHttpClient).send(any(), any());
+
+        VerificationCode code = new VerificationCode();
+        String email = "ratelimit@example.com";
+
+        for (int i = 0; i < RATE_LIMIT_MAX; i++) {
+            Assertions.assertTrue(injectedNotifyNLService.sendVerificationEmail(code, email));
+        }
+
+        Assertions.assertFalse(injectedNotifyNLService.sendVerificationEmail(code, email));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void testCleanupRateLimits() throws Exception {
+        Field rateLimitsField = NotifyNLService.class.getDeclaredField("rateLimits");
+        rateLimitsField.setAccessible(true);
+        Map<String, List<Instant>> rateLimits = (Map<String, List<Instant>>) rateLimitsField.get(notifyNLService);
+
+        // Future timestamp: not before Instant.now() so survives cleanup regardless of window
+        List<Instant> freshEntry = new ArrayList<>();
+        freshEntry.add(Instant.now().plus(Duration.ofMinutes(30)));
+        rateLimits.put("fresh@example.com", freshEntry);
+
+        // 2 hours in the past: expired (rateLimitWindowHours is 0 on non-CDI instance, cutoff = now)
+        List<Instant> expiredEntry = new ArrayList<>();
+        expiredEntry.add(Instant.now().minus(Duration.ofHours(2)));
+        rateLimits.put("expired@example.com", expiredEntry);
+
+        notifyNLService.cleanupRateLimits();
+
+        Assertions.assertFalse(rateLimits.containsKey("expired@example.com"));
+        Assertions.assertTrue(rateLimits.containsKey("fresh@example.com"));
+    }
+
     @Test
     void testIsSuccessResponse() throws Exception {
         Method method = NotifyNLService.class.getDeclaredMethod("isSuccessResponse", java.net.http.HttpResponse.class);
         method.setAccessible(true);
 
-        java.net.http.HttpResponse<String> response200 = org.mockito.Mockito.mock(java.net.http.HttpResponse.class);
-        org.mockito.Mockito.when(response200.statusCode()).thenReturn(200);
+        HttpResponse<String> response200 = Mockito.mock();
+        Mockito.when(response200.statusCode()).thenReturn(200);
         Assertions.assertTrue((Boolean) method.invoke(notifyNLService, response200));
 
-        java.net.http.HttpResponse<String> response201 = org.mockito.Mockito.mock(java.net.http.HttpResponse.class);
-        org.mockito.Mockito.when(response201.statusCode()).thenReturn(201);
+        HttpResponse<String> response201 = Mockito.mock();
+        Mockito.when(response201.statusCode()).thenReturn(201);
         Assertions.assertTrue((Boolean) method.invoke(notifyNLService, response201));
 
-        java.net.http.HttpResponse<String> response400 = org.mockito.Mockito.mock(java.net.http.HttpResponse.class);
-        org.mockito.Mockito.when(response400.statusCode()).thenReturn(400);
+        HttpResponse<String> response400 = Mockito.mock();
+        Mockito.when(response400.statusCode()).thenReturn(400);
         Assertions.assertFalse((Boolean) method.invoke(notifyNLService, response400));
     }
 }

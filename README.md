@@ -74,6 +74,14 @@ De applicatie is beschikbaar op `http://localhost:8080`.
 4. Bij succesvolle verificatie wordt de code gemarkeerd als gebruikt.
 5. Periodiek worden verlopen en gebruikte codes opgeschoond en verplaatst naar statistieken.
 
+### Rate limiting
+
+Om misbruik te voorkomen is er een rate limiter actief op het verzenden van e-mails. Per e-mailadres mag binnen een instelbaar tijdvenster een maximaal aantal verzendpogingen worden gedaan. Wordt dit maximum overschreden, dan wordt het verzoek direct afgewezen zonder dat er contact wordt opgenomen met NotifyNL. De teller wordt bijgehouden in het geheugen en automatisch opgeschoond via een periodieke taak.
+
+### Circuit breaker
+
+Bij herhaalde fouten in de communicatie met NotifyNL (bijvoorbeeld door netwerkproblemen of uitval van de externe dienst) wordt de circuit breaker actief. Na een configureerbaar aantal mislukte aanroepen gaat het circuit open: nieuwe verzoeken worden direct afgewezen zonder dat er opnieuw een verbinding wordt geprobeerd. Dit voorkomt dat de applicatie vastloopt op trage of niet-reagerende externe diensten. Na een wachttijd gaat het circuit in half-open toestand en worden nieuwe aanroepen opnieuw toegestaan om te testen of de externe dienst hersteld is.
+
 ## Configuratie
 
 Belangrijke parameters in `src/main/resources/application.properties`:
@@ -87,6 +95,16 @@ Belangrijke parameters in `src/main/resources/application.properties`:
 - `notifynl.emailverificatie.url`: NotifyNL API endpoint URL.
 - `notifynl.emailverificatie.api-key`: Standaard NotifyNL API-sleutel (gebruikt als fallback).
 - `notifynl.emailverificatie.template-id`: Standaard NotifyNL template-ID (gebruikt als fallback).
+
+### Rate limiter instellingen
+- `rate.limit.max-requests`: Maximum aantal verzendpogingen per e-mailadres binnen het tijdvenster (standaard 5).
+- `rate.limit.window-hours`: Duur van het tijdvenster voor de rate limiter in uren (standaard 1 uur).
+- `rate.limit.cleanup.schedule`: Frequentie van de opschoontaak voor verlopen rate limiter vermeldingen (standaard elk uur).
+
+### Circuit breaker instellingen
+- `mp.fault.tolerance.SendVerificationEmailFallbackHandler/CircuitBreaker/requestVolumeThreshold`: Minimum aantal aanroepen voordat het circuit kan openen (standaard 5).
+- `mp.fault.tolerance.SendVerificationEmailFallbackHandler/CircuitBreaker/delay`: Wachttijd in de open toestand voordat het circuit half-open gaat (standaard 30 seconden).
+- `mp.fault.tolerance.SendVerificationEmailFallbackHandler/CircuitBreaker/successThreshold`: Aantal opeenvolgende successen in half-open toestand om het circuit te sluiten (standaard 2).
 
 ### HttpClient instellingen
 - `httpclient.connect-timeout-seconds`: Timeout voor het opzetten van een verbinding (standaard 10 seconden).
