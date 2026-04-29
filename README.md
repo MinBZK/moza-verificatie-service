@@ -98,11 +98,12 @@ Belangrijke parameters in `src/main/resources/application.properties`:
 
 ### Rate limiter instellingen
 - `rate.limit.max-requests`: Maximum aantal verzendpogingen per e-mailadres binnen het tijdvenster (standaard 5).
-- `rate.limit.window-hours`: Duur van het tijdvenster voor de rate limiter in uren (standaard 1 uur).
+- `rate.limit.window-minutes`: Duur van het tijdvenster voor de rate limiter in minuten (standaard 15 minuten).
 - `rate.limit.cleanup.schedule`: Frequentie van de opschoontaak voor verlopen rate limiter vermeldingen (standaard elk uur).
 
 ### Circuit breaker instellingen
 - `mp.fault.tolerance.SendVerificationEmailFallbackHandler/CircuitBreaker/requestVolumeThreshold`: Minimum aantal aanroepen voordat het circuit kan openen (standaard 5).
+- `mp.fault.tolerance.SendVerificationEmailFallbackHandler/CircuitBreaker/failureRatio`: Drempelwaarde voor het percentage mislukte aanroepen (standaard 1.0 — circuit opent alleen bij volledige uitval).
 - `mp.fault.tolerance.SendVerificationEmailFallbackHandler/CircuitBreaker/delay`: Wachttijd in de open toestand voordat het circuit half-open gaat (standaard 30 seconden).
 - `mp.fault.tolerance.SendVerificationEmailFallbackHandler/CircuitBreaker/successThreshold`: Aantal opeenvolgende successen in half-open toestand om het circuit te sluiten (standaard 2).
 

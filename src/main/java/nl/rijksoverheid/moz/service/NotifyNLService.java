@@ -44,8 +44,8 @@ public class NotifyNLService {
     @ConfigProperty(name = "rate.limit.max-requests", defaultValue = "5")
     int rateLimitMaxRequests;
 
-    @ConfigProperty(name = "rate.limit.window-hours", defaultValue = "1")
-    int rateLimitWindowHours;
+    @ConfigProperty(name = "rate.limit.window-minutes", defaultValue = "15")
+    int rateLimitWindowMinutes;
 
     private static final int HTTP_OK = 200;
     private static final int HTTP_CREATED = 201;
@@ -76,6 +76,7 @@ public class NotifyNLService {
      */
     @CircuitBreaker(
             requestVolumeThreshold = 5,
+            failureRatio = 1.0,
             delay = 30,
             delayUnit = ChronoUnit.SECONDS,
             successThreshold = 2
@@ -142,7 +143,7 @@ public class NotifyNLService {
 
 
     private boolean isRateLimited(String email) {
-        Instant cutoff = Instant.now().minus(Duration.ofHours(rateLimitWindowHours));
+        Instant cutoff = Instant.now().minus(Duration.ofMinutes(rateLimitWindowMinutes));
         AtomicBoolean limited = new AtomicBoolean(false);
 
         rateLimits.compute(email, (key, timestamps) -> {
@@ -161,7 +162,7 @@ public class NotifyNLService {
 
     @Scheduled(every = "{rate.limit.cleanup.schedule:1h}")
     void cleanupRateLimits() {
-        Instant cutoff = Instant.now().minus(Duration.ofHours(rateLimitWindowHours));
+        Instant cutoff = Instant.now().minus(Duration.ofMinutes(rateLimitWindowMinutes));
         rateLimits.forEach((email, ignored) ->
             rateLimits.compute(email, (key, list) -> {
                 if (list == null) return null;

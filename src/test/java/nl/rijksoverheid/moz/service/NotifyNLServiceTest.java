@@ -247,6 +247,42 @@ public class NotifyNLServiceTest {
     }
 
     @Test
+    void testCircuitBreakerStaysClosedAfterThreeFailures() throws Exception {
+        Mockito.doThrow(new IOException("Connection refused")).when(mockHttpClient).send(any(), any());
+
+        for (int i = 1; i <= 3; i++) {
+            Assertions.assertFalse(injectedNotifyNLService.sendVerificationEmail(
+                    new VerificationCode(), "cb-closed-" + i + "@example.com"));
+        }
+
+        // Circuit still closed: 4th request reaches httpClient and succeeds
+        HttpResponse<String> mockResponse = Mockito.mock();
+        Mockito.when(mockResponse.statusCode()).thenReturn(200);
+        Mockito.doReturn(mockResponse).when(mockHttpClient).send(any(), any());
+
+        Assertions.assertTrue(injectedNotifyNLService.sendVerificationEmail(
+                new VerificationCode(), "cb-closed-4@example.com"));
+    }
+
+    @Test
+    void testCircuitBreakerOpensAfterFiveConsecutiveFailures() throws Exception {
+        Mockito.doThrow(new IOException("Connection refused")).when(mockHttpClient).send(any(), any());
+
+        // Requests 1-5: all fail — window full, 5/5 = 100% failure rate → circuit opens
+        for (int i = 1; i <= 5; i++) {
+            injectedNotifyNLService.sendVerificationEmail(
+                    new VerificationCode(), "cb-open-" + i + "@example.com");
+        }
+
+        // Request 6: circuit is open — httpClient.send() must not be called
+        injectedNotifyNLService.sendVerificationEmail(
+                new VerificationCode(), "cb-open-6@example.com");
+
+        // Total send() calls must still be 5 — the 6th request never reached httpClient
+        Mockito.verify(mockHttpClient, Mockito.times(5)).send(any(), any());
+    }
+
+    @Test
     void testIsSuccessResponse() throws Exception {
         Method method = NotifyNLService.class.getDeclaredMethod("isSuccessResponse", java.net.http.HttpResponse.class);
         method.setAccessible(true);
