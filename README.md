@@ -102,10 +102,13 @@ Belangrijke parameters in `src/main/resources/application.properties`:
 - `rate.limit.cleanup.schedule`: Frequentie van de opschoontaak voor verlopen rate limiter vermeldingen (standaard elk uur).
 
 ### Circuit breaker instellingen
-- `mp.fault.tolerance.SendVerificationEmailFallbackHandler/CircuitBreaker/requestVolumeThreshold`: Minimum aantal aanroepen voordat het circuit kan openen (standaard 5).
-- `mp.fault.tolerance.SendVerificationEmailFallbackHandler/CircuitBreaker/failureRatio`: Drempelwaarde voor het percentage mislukte aanroepen (standaard 1.0 — circuit opent alleen bij volledige uitval).
-- `mp.fault.tolerance.SendVerificationEmailFallbackHandler/CircuitBreaker/delay`: Wachttijd in de open toestand voordat het circuit half-open gaat (standaard 30 seconden).
-- `mp.fault.tolerance.SendVerificationEmailFallbackHandler/CircuitBreaker/successThreshold`: Aantal opeenvolgende successen in half-open toestand om het circuit te sluiten (standaard 2).
+
+De annotatieparameters in de code gelden als standaardwaarden. Ze kunnen per omgeving worden overschreven in `application.properties` via het MicroProfile Config formaat `<klasse>/<methode>/CircuitBreaker/<parameter>`. De annotatie waardes worden genegeerd als er voor een specifieke parameter een configuratiewaarde in de applicatie.properties file is ingevuld. Voorbeeld:
+
+- `nl.rijksoverheid.moz.service.NotifyNLService/sendVerificationEmail/CircuitBreaker/requestVolumeThreshold`: Minimum aantal aanroepen voordat het circuit kan openen (standaard 5).
+- `nl.rijksoverheid.moz.service.NotifyNLService/sendVerificationEmail/CircuitBreaker/failureRatio`: Drempelwaarde voor het percentage mislukte aanroepen (standaard 1.0 — circuit opent alleen bij volledige uitval).
+- `nl.rijksoverheid.moz.service.NotifyNLService/sendVerificationEmail/CircuitBreaker/delay`: Wachttijd in milliseconden in de open toestand voordat het circuit half-open gaat (standaard 30000).
+- `nl.rijksoverheid.moz.service.NotifyNLService/sendVerificationEmail/CircuitBreaker/successThreshold`: Aantal opeenvolgende successen in half-open toestand om het circuit te sluiten (standaard 2).
 
 ### HttpClient instellingen
 - `httpclient.connect-timeout-seconds`: Timeout voor het opzetten van een verbinding (standaard 10 seconden).
