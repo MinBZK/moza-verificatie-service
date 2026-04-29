@@ -4,6 +4,7 @@ import io.quarkus.test.InjectMock;
 import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
+import nl.rijksoverheid.moz.dto.response.VerificationResponse;
 import nl.rijksoverheid.moz.service.NotifyNLService;
 import nl.rijksoverheid.moz.dto.request.VerificationApplicationRequest;
 import nl.rijksoverheid.moz.dto.request.VerificationRequest;
@@ -11,7 +12,6 @@ import nl.rijksoverheid.moz.entity.StatisticFailureReason;
 import nl.rijksoverheid.moz.entity.VerificationCode;
 import nl.rijksoverheid.moz.entity.VerificationStatistics;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import nl.rijksoverheid.moz.job.VerificationCleanupJob;
 import jakarta.transaction.Transactional;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,11 +29,7 @@ import static org.mockito.ArgumentMatchers.any;
 @QuarkusTest
 class VerificationControllerTest {
 
-
     private static final int VERIFICATION_CODE_VALIDITY_MINUTES = 10;
-
-    @Inject
-    EntityManager entityManager;
 
     @InjectMock
     NotifyNLService notifyNLService;
@@ -93,13 +89,16 @@ class VerificationControllerTest {
         request.setReferenceId(referenceId);
         request.setCode(code.getCode());
 
-        given()
+        VerificationResponse response = given()
                 .contentType(ContentType.JSON)
                 .body(request)
                 .when().post("/verify")
                 .then()
                 .statusCode(200)
-                .body("success", is(true));
+                .extract().as(VerificationResponse.class);
+
+        assertNotNull(response);
+        assertTrue(response.isSuccess());
     }
 
     @Test
@@ -108,15 +107,18 @@ class VerificationControllerTest {
         request.setReferenceId("invalid-ref-id");
         request.setCode("123456");
 
-        given()
+        VerificationResponse response = given()
                 .contentType(ContentType.JSON)
                 .body(request)
                 .when().post("/verify")
                 .then()
                 .statusCode(200)
-                .body("success", is(false))
-                .body("reasonId", is(1))
-                .body("reasonMessage", is("Reference ID not found"));
+                .extract().as(VerificationResponse.class);
+
+        assertNotNull(response);
+        assertFalse(response.isSuccess());
+        assertEquals(1, response.getReasonId());
+        assertEquals("Reference ID not found", response.getReasonMessage());
     }
 
     @Test
@@ -139,15 +141,18 @@ class VerificationControllerTest {
         request.setReferenceId(referenceId);
         request.setCode(code.getCode());
 
-        given()
+        VerificationResponse response = given()
                 .contentType(ContentType.JSON)
                 .body(request)
                 .when().post("/verify")
                 .then()
                 .statusCode(200)
-                .body("success", is(false))
-                .body("reasonId", is(2))
-                .body("reasonMessage", is("Code expired"));
+                .extract().as(VerificationResponse.class);
+
+        assertNotNull(response);
+        assertFalse(response.isSuccess());
+        assertEquals(2, response.getReasonId());
+        assertEquals("Code expired", response.getReasonMessage());
     }
 
     @Transactional
@@ -185,15 +190,18 @@ class VerificationControllerTest {
                 .body("success", is(true));
 
         // Second verification - should fail with 200 and reasonId 3
-        given()
+        VerificationResponse response = given()
                 .contentType(ContentType.JSON)
                 .body(request)
                 .when().post("/verify")
                 .then()
                 .statusCode(200)
-                .body("success", is(false))
-                .body("reasonId", is(3))
-                .body("reasonMessage", is("Code already used"));
+                .extract().as(VerificationResponse.class);
+
+        assertNotNull(response);
+        assertFalse(response.isSuccess());
+        assertEquals(3, response.getReasonId());
+        assertEquals("Code already used", response.getReasonMessage());
     }
 
     @Test
@@ -214,15 +222,18 @@ class VerificationControllerTest {
         request.setReferenceId(referenceId);
         request.setCode("000000"); // Wrong code
 
-        given()
+        VerificationResponse response = given()
                 .contentType(ContentType.JSON)
                 .body(request)
                 .when().post("/verify")
                 .then()
                 .statusCode(200)
-                .body("success", is(false))
-                .body("reasonId", is(4))
-                .body("reasonMessage", is("Incorrect code"));
+                .extract().as(VerificationResponse.class);
+
+        assertNotNull(response);
+        assertFalse(response.isSuccess());
+        assertEquals(4, response.getReasonId());
+        assertEquals("Incorrect code", response.getReasonMessage());
     }
     @Test
     void testRequestVerificationFailure() {
@@ -247,6 +258,7 @@ class VerificationControllerTest {
     void testCleanUpSuccessfulVerifications() {
         VerificationCode code = new VerificationCode();
         code.setVerifiedAt(LocalDateTime.now().minusMinutes(1));
+        code.setCreatedAt(LocalDateTime.now());
         code.persist();
 
         cleanupJob.cleanUpSuccessfulVerifications();
@@ -257,6 +269,7 @@ class VerificationControllerTest {
         // Check that statistics are created
         List<VerificationStatistics> stats = VerificationStatistics.listAll();
         assertTrue(stats.stream().anyMatch(s -> s.getVerifiedAt() != null));
+        assertTrue(stats.stream().anyMatch(s -> s.getCreatedAt() != null));
     }
 
     @Test
@@ -316,5 +329,19 @@ class VerificationControllerTest {
         assertEquals(2, stats.size());
         assertTrue(stats.stream().anyMatch(s -> s.getFailureReason() == StatisticFailureReason.NOT_SENT));
         assertTrue(stats.stream().anyMatch(s -> s.getFailureReason() == StatisticFailureReason.NOT_VERIFIED));
+    }
+
+    @Test
+    void testGenerateCodeThrowsForNonPositiveLength() {
+        System.setProperty("verification.code.length", "0");
+
+        try {
+            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                    VerificationCode::new);
+
+            assertEquals("Code length must be positive", ex.getMessage());
+        } finally {
+            System.clearProperty("verification.code.length");
+        }
     }
 }

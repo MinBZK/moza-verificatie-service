@@ -61,28 +61,12 @@ public class VerificationCode extends PanacheEntity {
         return String.valueOf(min + RANDOM.nextInt(range));
     }
 
-    public long getId() {
-        return id;
-    }
-
-    public void setId(long id) {
-        this.id = id;
-    }
-
     public String getReferenceId() {
         return referenceId;
     }
 
-    public void setReferenceId(String referenceId) {
-        this.referenceId = referenceId;
-    }
-
     public String getCode() {
         return code;
-    }
-
-    public void setCode(String code) {
-        this.code = code;
     }
 
     public LocalDateTime getCreatedAt() {
@@ -99,14 +83,6 @@ public class VerificationCode extends PanacheEntity {
 
     public void setValidUntil(LocalDateTime validUntil) {
         this.validUntil = validUntil;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
     }
 
     public LocalDateTime getVerifiedAt() {
@@ -129,7 +105,6 @@ public class VerificationCode extends PanacheEntity {
         return verifiedAt != null;
     }
 
-
     public static Optional<VerificationCode> findByReferenceId(String referenceId) {
         return find("referenceId = ?1", referenceId).singleResultOptional();
     }
@@ -141,6 +116,4 @@ public class VerificationCode extends PanacheEntity {
     public static List<VerificationCode> findExpiredCodes(LocalDateTime now) {
         return find("validUntil < ?1", now).list();
     }
-
-
 }

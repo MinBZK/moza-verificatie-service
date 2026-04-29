@@ -1,19 +1,20 @@
 package nl.rijksoverheid.moz.dto.response;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.*;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class VerificationResponse {
 
-    private boolean success;
+    private final boolean success;
 
+    @JsonProperty
     private Integer reasonId;
 
+    @JsonProperty
     private String reasonMessage;
 
-    public VerificationResponse() {}
-
-    public VerificationResponse(boolean success) {
+    @JsonCreator
+    public VerificationResponse(@JsonProperty("success") boolean success) {
         this.success = success;
     }
 
@@ -29,23 +30,11 @@ public class VerificationResponse {
         return success;
     }
 
-    public void setSuccess(boolean success) {
-        this.success = success;
-    }
-
     public Integer getReasonId() {
         return reasonId;
     }
 
-    public void setReasonId(Integer reasonId) {
-        this.reasonId = reasonId;
-    }
-
     public String getReasonMessage() {
         return reasonMessage;
-    }
-
-    public void setReasonMessage(String reasonMessage) {
-        this.reasonMessage = reasonMessage;
     }
 }

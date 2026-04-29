@@ -1,8 +1,8 @@
 package nl.rijksoverheid.moz;
 
-import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
+import nl.rijksoverheid.moz.dto.response.AdminStatisticsResponse;
 import nl.rijksoverheid.moz.entity.StatisticFailureReason;
 import nl.rijksoverheid.moz.entity.VerificationStatistics;
 import org.junit.jupiter.api.Test;
@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.CoreMatchers.is;
+import static org.junit.jupiter.api.Assertions.*;
 
 @QuarkusTest
 public class AdminStatisticsControllerTest {
@@ -19,15 +20,19 @@ public class AdminStatisticsControllerTest {
     void testGetAdminStatistics() {
         createStats();
 
-        given()
+        AdminStatisticsResponse response = given()
                 .contentType(ContentType.JSON)
                 .when().get("/admin/statistics")
                 .then()
                 .statusCode(200)
-                .body("averageVerificationTimeSeconds", is(90.0f))
-                .body("unverifiedPercentage", is(50.0f))
-                .body("notSentCount", is(1))
-                .body("notVerifiedCount", is(1));
+                .extract().as(AdminStatisticsResponse.class);
+
+        assertNotNull(response);
+
+        assertEquals(90.0f, response.averageVerificationTimeSeconds());
+        assertEquals(50.0f, response.unverifiedPercentage());
+        assertEquals(1, response.notSentCount());
+        assertEquals(1, response.notVerifiedCount());
     }
 
     @jakarta.transaction.Transactional
@@ -70,15 +75,19 @@ public class AdminStatisticsControllerTest {
     void testGetAdminStatisticsEmpty() {
         clearStats();
 
-        given()
+        AdminStatisticsResponse response = given()
                 .contentType(ContentType.JSON)
                 .when().get("/admin/statistics")
                 .then()
                 .statusCode(200)
-                .body("averageVerificationTimeSeconds", is(0.0f))
-                .body("unverifiedPercentage", is(0.0f))
-                .body("notSentCount", is(0))
-                .body("notVerifiedCount", is(0));
+                .extract().as(AdminStatisticsResponse.class);
+
+        assertNotNull(response);
+
+        assertEquals(0.0f, response.averageVerificationTimeSeconds());
+        assertEquals(0.0f, response.unverifiedPercentage());
+        assertEquals(0, response.notSentCount());
+        assertEquals(0, response.notVerifiedCount());
     }
 
     @jakarta.transaction.Transactional
