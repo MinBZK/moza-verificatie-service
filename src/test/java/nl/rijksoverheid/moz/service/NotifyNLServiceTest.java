@@ -2,14 +2,24 @@ package nl.rijksoverheid.moz.service;
 
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
+import io.smallrye.faulttolerance.api.CircuitBreakerMaintenance;
+import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.entity.VerificationCode;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.mockito.Mockito;
+
+import java.io.IOException;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.http.HttpClient;
 import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 
@@ -21,13 +31,14 @@ public class NotifyNLServiceTest {
     @BeforeEach
     void setup() throws Exception {
         notifyNLService = new NotifyNLService();
-        // Set necessary fields via reflection or assume they are picked up from application.properties if using @QuarkusTest
-        // Actually NotifyNLService uses @ConfigProperty, which Quarkus injects.
-        // But since we are creating it with 'new', we might need to set them manually or use @Inject.
+        circuitBreakerMaintenance.resetAll();
     }
 
-    @jakarta.inject.Inject
+    @Inject
     NotifyNLService injectedNotifyNLService;
+
+    @Inject
+    CircuitBreakerMaintenance circuitBreakerMaintenance;
 
     @InjectMock
     HttpClient mockHttpClient;
@@ -177,7 +188,7 @@ public class NotifyNLServiceTest {
 
     @Test
     void testSendVerificationEmailException() throws Exception {
-        Mockito.doThrow(new RuntimeException("Connection refused")).when(mockHttpClient).send(any(), any());
+        Mockito.doThrow(new IOException("Connection refused")).when(mockHttpClient).send(any(), any());
 
         VerificationCode code = new VerificationCode();
         Assertions.assertFalse(injectedNotifyNLService.sendVerificationEmail(code, "test@example.com"));
@@ -192,6 +203,83 @@ public class NotifyNLServiceTest {
         VerificationCode code = new VerificationCode();
         Assertions.assertTrue(injectedNotifyNLService.sendVerificationEmail(
                 code, "test@example.com", VALID_API_KEY, "custom-template-id"));
+    }
+
+    private static final int RATE_LIMIT_MAX = 5;
+
+    @Test
+    void testSendVerificationEmailRateLimited() throws Exception {
+        HttpResponse<String> mockResponse = Mockito.mock();
+        Mockito.when(mockResponse.statusCode()).thenReturn(200);
+        Mockito.doReturn(mockResponse).when(mockHttpClient).send(any(), any());
+
+        VerificationCode code = new VerificationCode();
+        String email = "ratelimit@example.com";
+
+        for (int i = 0; i < RATE_LIMIT_MAX; i++) {
+            Assertions.assertTrue(injectedNotifyNLService.sendVerificationEmail(code, email));
+        }
+
+        Assertions.assertFalse(injectedNotifyNLService.sendVerificationEmail(code, email));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void testCleanupRateLimits() throws Exception {
+        Field rateLimitsField = NotifyNLService.class.getDeclaredField("rateLimits");
+        rateLimitsField.setAccessible(true);
+        Map<String, List<Instant>> rateLimits = (Map<String, List<Instant>>) rateLimitsField.get(notifyNLService);
+
+        // Future timestamp: not before Instant.now() so survives cleanup regardless of window
+        List<Instant> freshEntry = new ArrayList<>();
+        freshEntry.add(Instant.now().plus(Duration.ofMinutes(30)));
+        rateLimits.put("fresh@example.com", freshEntry);
+
+        // 2 hours in the past: expired (rateLimitWindowHours is 0 on non-CDI instance, cutoff = now)
+        List<Instant> expiredEntry = new ArrayList<>();
+        expiredEntry.add(Instant.now().minus(Duration.ofHours(2)));
+        rateLimits.put("expired@example.com", expiredEntry);
+
+        notifyNLService.cleanupRateLimits();
+
+        Assertions.assertFalse(rateLimits.containsKey("expired@example.com"));
+        Assertions.assertTrue(rateLimits.containsKey("fresh@example.com"));
+    }
+
+    @Test
+    void testCircuitBreakerStaysClosedAfterThreeFailures() throws Exception {
+        Mockito.doThrow(new IOException("Connection refused")).when(mockHttpClient).send(any(), any());
+
+        for (int i = 1; i <= 3; i++) {
+            Assertions.assertFalse(injectedNotifyNLService.sendVerificationEmail(
+                    new VerificationCode(), "cb-closed-" + i + "@example.com"));
+        }
+
+        // Circuit still closed: 4th request reaches httpClient and succeeds
+        HttpResponse<String> mockResponse = Mockito.mock();
+        Mockito.when(mockResponse.statusCode()).thenReturn(200);
+        Mockito.doReturn(mockResponse).when(mockHttpClient).send(any(), any());
+
+        Assertions.assertTrue(injectedNotifyNLService.sendVerificationEmail(
+                new VerificationCode(), "cb-closed-4@example.com"));
+    }
+
+    @Test
+    void testCircuitBreakerOpensAfterFiveConsecutiveFailures() throws Exception {
+        Mockito.doThrow(new IOException("Connection refused")).when(mockHttpClient).send(any(), any());
+
+        // Requests 1-5: all fail — window full, 5/5 = 100% failure rate → circuit opens
+        for (int i = 1; i <= 5; i++) {
+            injectedNotifyNLService.sendVerificationEmail(
+                    new VerificationCode(), "cb-open-" + i + "@example.com");
+        }
+
+        // Request 6: circuit is open — httpClient.send() must not be called
+        injectedNotifyNLService.sendVerificationEmail(
+                new VerificationCode(), "cb-open-6@example.com");
+
+        // Total send() calls must still be 5 — the 6th request never reached httpClient
+        Mockito.verify(mockHttpClient, Mockito.times(5)).send(any(), any());
     }
 
     @Test
