@@ -83,8 +83,9 @@ public class NotifyNLService {
     )
     @Fallback(SendVerificationEmailFallbackHandler.class)
     public boolean sendVerificationEmail(VerificationCode code, String email, String customApiKey, String customTemplateId) {
+        LOG.debugf("Preparing to send verification email for reference ID: %s to email: %s", code.getReferenceId(), email);
         if (isRateLimited(email)) {
-            LOG.warn("Rate limit exceeded for email: " + email);
+            LOG.warnf("Rate limit exceeded for email: %s", email);
             return false;
         }
 
@@ -92,22 +93,29 @@ public class NotifyNLService {
         String effectiveTemplateId = (customTemplateId != null && !customTemplateId.isBlank()) ? customTemplateId : templateId;
 
         String jsonBody = buildJsonBody(code.getCode(), email, effectiveTemplateId);
-        ApiKeyDetails keys = extractServiceIdAndApiKey(effectiveApiKey);
+        ApiKeyDetails keys;
+        try {
+            keys = extractServiceIdAndApiKey(effectiveApiKey);
+        } catch (IllegalArgumentException e) {
+            LOG.errorf("Invalid API key provided for reference ID: %s, error: %s", code.getReferenceId(), e.getMessage());
+            return false;
+        }
         String token = createToken(keys.secret(), keys.serviceId());
         HttpRequest request = buildHttpRequest(jsonBody, token);
 
         try {
+            LOG.debugf("Sending request to NotifyNL for reference ID: %s", code.getReferenceId());
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (isSuccessResponse(response)) {
-                LOG.info("Verification code sent for reference ID: " + code.getReferenceId());
+                LOG.infof("Verification code sent successfully for reference ID: %s", code.getReferenceId());
                 return true;
             }
-            LOG.error("Failed to send verification code for reference ID: " + code.getReferenceId()
-                    + ", status code: " + response.statusCode() + ", response: " + response.body());
+            LOG.errorf("Failed to send verification code for reference ID: %s, status code: %d, response: %s",
+                    code.getReferenceId(), response.statusCode(), response.body());
             return false;
         } catch (IOException | InterruptedException e) {
-            LOG.error("Failed to communicate with NotifyNL service for reference ID: " + code.getReferenceId()
-                    + ", error: " + e.getMessage());
+            LOG.errorf("Failed to communicate with NotifyNL service for reference ID: %s, error: %s",
+                    code.getReferenceId(), e.getMessage());
             throw new RuntimeException("Failed to communicate with NotifyNL service", e);
         }
     }
@@ -162,6 +170,8 @@ public class NotifyNLService {
 
     @Scheduled(every = "{rate.limit.cleanup.schedule:1h}")
     void cleanupRateLimits() {
+        LOG.debug("Starting cleanup of rate limit map");
+        int initialSize = rateLimits.size();
         Instant cutoff = Instant.now().minus(Duration.ofMinutes(rateLimitWindowMinutes));
         rateLimits.forEach((email, ignored) ->
             rateLimits.compute(email, (key, list) -> {
@@ -170,6 +180,7 @@ public class NotifyNLService {
                 return list.isEmpty() ? null : list;
             })
         );
+        LOG.debugf("Cleanup of rate limit map finished. Initial size: %d, current size: %d", initialSize, rateLimits.size());
     }
 
     private record ApiKeyDetails(String serviceId, String secret) {}

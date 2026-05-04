@@ -27,9 +27,10 @@ public class VerificationCleanupJob {
     @Transactional
     public void cleanUpSuccessfulVerifications() {
         // we can be sure that this method is never executed concurrently
+        LOG.debug("Starting cleanup of successful verifications");
         List<VerificationCode> codes = VerificationCode.findSuccessfulVerifications();
         if (!codes.isEmpty()) {
-            LOG.info("Cleaning up " + codes.size() + " successful verifications");
+            LOG.infof("Cleaning up %d successful verifications", codes.size());
         }
 
         for (VerificationCode code : codes) {
@@ -46,15 +47,17 @@ public class VerificationCleanupJob {
         lastSuccessfulCleanupTimestamp.set(System.currentTimeMillis());
         successfulCleanupCount.incrementAndGet();
         totalSuccessfulCodesProcessed.addAndGet(codes.size());
+        LOG.debugf("Finished cleanup of successful verifications. Processed: %d", codes.size());
     }
 
     @Scheduled(every = "{verification.cleanup.schedule}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     @Transactional
     public void cleanUpExpiredCodes() {
         // we can be sure that this method is never executed concurrently
+        LOG.debug("Starting cleanup of expired verification codes");
         List<VerificationCode> codes = VerificationCode.findExpiredCodes(java.time.LocalDateTime.now());
         if (!codes.isEmpty()) {
-            LOG.info("Cleaning up " + codes.size() + " expired verification codes");
+            LOG.infof("Cleaning up %d expired verification codes", codes.size());
         }
 
         for (VerificationCode code : codes) {
@@ -75,6 +78,7 @@ public class VerificationCleanupJob {
         lastExpiredCleanupTimestamp.set(System.currentTimeMillis());
         expiredCleanupCount.incrementAndGet();
         totalExpiredCodesProcessed.addAndGet(codes.size());
+        LOG.debugf("Finished cleanup of expired verification codes. Processed: %d", codes.size());
     }
     
     // Getter methods for health check monitoring
