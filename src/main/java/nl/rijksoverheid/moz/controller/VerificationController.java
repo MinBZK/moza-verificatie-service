@@ -63,9 +63,11 @@ public class VerificationController {
             )
     })
     public Response requestVerification(@Valid VerificationApplicationRequest request) {
-        LOG.info("Creating verification request");
+        LOG.infof("Creating verification request for email: %s", request.getEmail());
         VerificationCode code = new VerificationCode();
         code.persist();
+        LOG.debugf("Verification code entity persisted with reference ID: %s", code.getReferenceId());
+
         boolean result = notifyNLService.sendVerificationEmail(
                 code, 
                 request.getEmail(), 
@@ -75,8 +77,11 @@ public class VerificationController {
 
         if(result) {
             code.setVerifyEmailSentAt(LocalDateTime.now());
+            LOG.infof("Verification request successful. Reference ID: %s", code.getReferenceId());
             return Response.ok(code.getReferenceId()).build();
         }
+        
+        LOG.errorf("Verification request failed for email: %s. NotifyNL service returned failure.", request.getEmail());
         return Response.serverError().entity("").build();
     }
 
@@ -101,31 +106,32 @@ public class VerificationController {
             )
     })
     public VerificationResponse verify(@Valid VerificationRequest request) {
+        LOG.infof("Verification attempt for referenceId: %s", request.getReferenceId());
 
         Optional<VerificationCode> codeOpt = VerificationCode.findByReferenceId(request.getReferenceId());
         if (codeOpt.isEmpty()) {
-            LOG.warn("Verification failed: code not found for referenceId: " + request.getReferenceId());
+            LOG.warnf("Verification failed: code not found for referenceId: %s", request.getReferenceId());
             return new VerificationResponse(false, VerificationFailureReason.CODE_NOT_FOUND);
         }
         VerificationCode code = codeOpt.get();
 
         if (code.getValidUntil().isBefore(LocalDateTime.now())) {
-            LOG.warn("Verification failed: code expired for referenceId: " + request.getReferenceId());
+            LOG.warnf("Verification failed: code expired for referenceId: %s", request.getReferenceId());
             return new VerificationResponse(false, VerificationFailureReason.CODE_EXPIRED);
         }
 
         if (code.isUsed()) {
-            LOG.warn("Verification failed: code already used for referenceId: " + request.getReferenceId());
+            LOG.warnf("Verification failed: code already used for referenceId: %s", request.getReferenceId());
             return new VerificationResponse(false, VerificationFailureReason.CODE_ALREADY_USED);
         }
 
         if (!Objects.equals(code.getCode(), request.getCode())) {
-            LOG.warn("Verification failed: incorrect code for referenceId: " + request.getReferenceId());
+            LOG.warnf("Verification failed: incorrect code for referenceId: %s", request.getReferenceId());
             return new VerificationResponse(false, VerificationFailureReason.INCORRECT_CODE);
         }
 
         VerificationCode.update("verifiedAt = ?1 where id = ?2", LocalDateTime.now(), code.id);
-        LOG.info("Verification successful for referenceId: " + request.getReferenceId());
+        LOG.infof("Verification successful for referenceId: %s", request.getReferenceId());
         return new VerificationResponse(true);
     }
 }
