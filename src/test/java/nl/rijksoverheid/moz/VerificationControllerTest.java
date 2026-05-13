@@ -247,7 +247,23 @@ class VerificationControllerTest {
                 .body(request)
                 .when().post("/request")
                 .then()
-                .statusCode(500);
+                .statusCode(500)
+                .body("message", is("Verification request failed: NotifyNL service returned failure."))
+                .body("code", is("HTTP_500"))
+                .body("timestamp", org.hamcrest.Matchers.notNullValue());
+    }
+
+    @Test
+    void testValidationErrorResponse() {
+        VerificationApplicationRequest request = new VerificationApplicationRequest();
+        request.setEmail("invalid-email"); // Should fail @Email validation
+
+        given()
+                .contentType(ContentType.JSON)
+                .body(request)
+                .when().post("/request")
+                .then()
+                .statusCode(400);
     }
 
     @Inject
