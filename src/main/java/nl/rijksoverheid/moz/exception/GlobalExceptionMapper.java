@@ -1,10 +1,8 @@
 package nl.rijksoverheid.moz.exception;
 
-import jakarta.annotation.Priority;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.ValidationException;
 import jakarta.ws.rs.WebApplicationException;
-import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
@@ -14,10 +12,10 @@ import org.jboss.logging.Logger;
 import java.util.stream.Collectors;
 
 @Provider
-@Priority(1)
 public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
 
     private static final Logger LOG = Logger.getLogger(GlobalExceptionMapper.class);
+    private static final String PROBLEM_JSON = "application/problem+json";
 
     @Override
     public Response toResponse(Throwable exception) {
@@ -34,49 +32,58 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
     }
 
     private Response handleConstraintViolationException(ConstraintViolationException e) {
-        String message = e.getConstraintViolations().stream()
-                .map(cv -> cv.getPropertyPath() + " " + cv.getMessage())
+        String detail = e.getConstraintViolations().stream()
+                .map(cv -> {
+                    String path = cv.getPropertyPath().toString();
+                    // Remove the method name prefix (e.g., "requestVerification.request.email" -> "request.email")
+                    path = path.replaceFirst("^[^.]+\\.", "");
+                    return path + " " + cv.getMessage();
+                })
                 .collect(Collectors.joining(", "));
-        
-        LOG.warnf("Constraint violation: %s", message);
 
-        ErrorResponse errorResponse = new ErrorResponse(message, "VALIDATION_ERROR");
+        LOG.warnf("Constraint violation: %s", detail);
+
+        ErrorResponse errorResponse = new ErrorResponse("Bad Request", 400, detail);
         return Response.status(Response.Status.BAD_REQUEST)
                 .entity(errorResponse)
-                .type(MediaType.APPLICATION_JSON)
+                .type(PROBLEM_JSON)
                 .build();
     }
 
     private Response handleValidationException(ValidationException e) {
         LOG.warnf("Validation failed: %s", e.getMessage());
 
-        ErrorResponse errorResponse = new ErrorResponse(e.getMessage(), "VALIDATION_ERROR");
+        ErrorResponse errorResponse = new ErrorResponse("Bad Request", 400, e.getMessage());
         return Response.status(Response.Status.BAD_REQUEST)
                 .entity(errorResponse)
-                .type(MediaType.APPLICATION_JSON)
+                .type(PROBLEM_JSON)
                 .build();
     }
 
     private Response handleWebApplicationException(WebApplicationException e) {
-        int status = e.getResponse().getStatus();
-        String message = e.getMessage();
-        
-        LOG.errorf(e, "WebApplicationException occurred with status %d: %s", status, message);
+        Response response = e.getResponse();
+        int status = response.getStatus();
+        boolean isServerError = status >= 500;
 
-        ErrorResponse errorResponse = new ErrorResponse(message, "HTTP_" + status);
+        String title = response.getStatusInfo().getReasonPhrase();
+        String detail = isServerError ? null : e.getMessage();
+
+        LOG.errorf(e, "WebApplicationException occurred with status %d: %s", status, e.getMessage());
+
+        ErrorResponse errorResponse = new ErrorResponse(title, status, detail);
         return Response.status(status)
                 .entity(errorResponse)
-                .type(MediaType.APPLICATION_JSON)
+                .type(PROBLEM_JSON)
                 .build();
     }
 
     private Response handleGenericException(Throwable e) {
         LOG.error("An unexpected error occurred", e);
 
-        ErrorResponse errorResponse = new ErrorResponse("Internal Server Error", "INTERNAL_ERROR");
+        ErrorResponse errorResponse = new ErrorResponse("Internal Server Error", 500);
         return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                 .entity(errorResponse)
-                .type(MediaType.APPLICATION_JSON)
+                .type(PROBLEM_JSON)
                 .build();
     }
 }

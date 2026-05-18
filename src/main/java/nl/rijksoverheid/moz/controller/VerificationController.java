@@ -23,7 +23,6 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponses;
 import org.jboss.logging.Logger;
 
-import java.net.http.HttpResponse;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.Optional;
@@ -84,7 +83,7 @@ public class VerificationController {
         }
         
         LOG.errorf("Verification request failed for email: %s. NotifyNL service returned failure.", request.getEmail());
-        throw new InternalServerErrorException("Verification request failed: NotifyNL service returned failure.");
+        throw new InternalServerErrorException();
     }
 
     @POST

@@ -248,8 +248,6 @@ class VerificationControllerTest {
                 .when().post("/request")
                 .then()
                 .statusCode(500)
-                .body("message", is("Verification request failed: NotifyNL service returned failure."))
-                .body("code", is("HTTP_500"))
                 .body("timestamp", org.hamcrest.Matchers.notNullValue());
     }
 

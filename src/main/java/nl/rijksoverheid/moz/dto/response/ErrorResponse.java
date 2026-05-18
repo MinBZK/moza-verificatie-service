@@ -1,50 +1,23 @@
 package nl.rijksoverheid.moz.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class ErrorResponse {
-    private String message;
-    private String code;
-    private LocalDateTime timestamp;
-
-    public ErrorResponse() {
-        this.timestamp = LocalDateTime.now();
+public record ErrorResponse(
+    String type,
+    String title,
+    Integer status,
+    String detail,
+    String instance,
+    OffsetDateTime timestamp
+) {
+    public ErrorResponse(String title, Integer status, String detail) {
+        this("about:blank", title, status, detail, null, OffsetDateTime.now(ZoneOffset.UTC));
     }
 
-    public ErrorResponse(String message) {
-        this();
-        this.message = message;
-    }
-
-    public ErrorResponse(String message, String code) {
-        this();
-        this.message = message;
-        this.code = code;
-    }
-
-    public String getMessage() {
-        return message;
-    }
-
-    public void setMessage(String message) {
-        this.message = message;
-    }
-
-    public String getCode() {
-        return code;
-    }
-
-    public void setCode(String code) {
-        this.code = code;
-    }
-
-    public LocalDateTime getTimestamp() {
-        return timestamp;
-    }
-
-    public void setTimestamp(LocalDateTime timestamp) {
-        this.timestamp = timestamp;
+    public ErrorResponse(String title, Integer status) {
+        this(title, status, null);
     }
 }
