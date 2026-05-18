@@ -247,7 +247,21 @@ class VerificationControllerTest {
                 .body(request)
                 .when().post("/request")
                 .then()
-                .statusCode(500);
+                .statusCode(500)
+                .body("timestamp", org.hamcrest.Matchers.notNullValue());
+    }
+
+    @Test
+    void testValidationErrorResponse() {
+        VerificationApplicationRequest request = new VerificationApplicationRequest();
+        request.setEmail("invalid-email"); // Should fail @Email validation
+
+        given()
+                .contentType(ContentType.JSON)
+                .body(request)
+                .when().post("/request")
+                .then()
+                .statusCode(400);
     }
 
     @Inject

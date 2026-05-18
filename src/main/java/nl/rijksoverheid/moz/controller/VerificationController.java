@@ -2,6 +2,7 @@ package nl.rijksoverheid.moz.controller;
 
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
+import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
@@ -9,6 +10,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import nl.rijksoverheid.moz.dto.request.VerificationApplicationRequest;
 import nl.rijksoverheid.moz.dto.request.VerificationRequest;
+import nl.rijksoverheid.moz.dto.response.ErrorResponse;
 import nl.rijksoverheid.moz.dto.response.VerificationFailureReason;
 import nl.rijksoverheid.moz.dto.response.VerificationResponse;
 import nl.rijksoverheid.moz.entity.VerificationCode;
@@ -21,7 +23,6 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponses;
 import org.jboss.logging.Logger;
 
-import java.net.http.HttpResponse;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.Optional;
@@ -48,18 +49,18 @@ public class VerificationController {
                     description = "Verification request created, returns the reference ID",
                     content = @Content(
                             mediaType = MediaType.TEXT_PLAIN,
-                            schema = @Schema(type = SchemaType.STRING, example = "00000000-0000-0000-0000-000000000000")
+                            schema = @Schema(type = SchemaType.STRING)
                     )
             ),
             @APIResponse(
                     responseCode = "400",
                     description = "Invalid request format",
-                    content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = Object.class))
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ErrorResponse.class))
             ),
             @APIResponse(
                     responseCode = "500",
                     description = "Internal server error",
-                    content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = Object.class))
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ErrorResponse.class))
             )
     })
     public Response requestVerification(@Valid VerificationApplicationRequest request) {
@@ -82,7 +83,7 @@ public class VerificationController {
         }
         
         LOG.errorf("Verification request failed for email: %s. NotifyNL service returned failure.", request.getEmail());
-        return Response.serverError().entity("").build();
+        throw new InternalServerErrorException();
     }
 
     @POST
@@ -102,7 +103,7 @@ public class VerificationController {
             @APIResponse(
                     responseCode = "400",
                     description = "Invalid request format",
-                    content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = Object.class))
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ErrorResponse.class))
             )
     })
     public VerificationResponse verify(@Valid VerificationRequest request) {
