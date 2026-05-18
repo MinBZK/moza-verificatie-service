@@ -49,7 +49,7 @@ public class VerificationController {
                     description = "Verification request created, returns the reference ID",
                     content = @Content(
                             mediaType = MediaType.TEXT_PLAIN,
-                            schema = @Schema(type = SchemaType.STRING, example = "00000000-0000-0000-0000-000000000000")
+                            schema = @Schema(type = SchemaType.STRING)
                     )
             ),
             @APIResponse(
